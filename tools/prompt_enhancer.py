@@ -242,7 +242,7 @@ def enhance_prompt_for_3d(
         else:
             layout_directives = "3-panel turnaround: front, side, rear views"
     else:
-        layout_directives = "three-quarter hero view, 35-degree isometric"
+        layout_directives = "single solo three-quarter hero view, 35-degree isometric, centered isolated"
 
     style_directives = get_style_directives(art_style)
 
