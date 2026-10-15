@@ -75,6 +75,10 @@ class MultiviewAligner:
         center_x = w / 2.0
         center_y = h / 2.0
 
+        # Determine dominant component (largest area)
+        sizes = [int(np.sum(labeled_array == i)) for i in range(1, num_features + 1)]
+        best_label = int(np.argmax(sizes)) + 1
+
         # Keep components that are either the best label OR central features (not boundary bleeds)
         keep_mask = np.zeros_like(mask, dtype=bool)
         for feat_id in range(1, num_features + 1):

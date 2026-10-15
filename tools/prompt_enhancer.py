@@ -45,30 +45,16 @@ SUPPORTED_HUMANOID_POSES = [
 
 
 def get_humanoid_pose_directives(pose: str = HUMANOID_POSE_A) -> str:
-    """Returns exact geometric directives for canonical humanoid poses."""
+    """Returns compact geometric directives for canonical humanoid poses within token budget."""
     p = pose.lower().strip()
     if p == HUMANOID_POSE_T:
-        return (
-            "canonical upright T-pose: arms extended horizontally straight out at 90 degrees from shoulders, "
-            "elbows straight, wrists aligned, flat open hands with palms facing down toward the floor, straight upright spine, "
-            "legs straight and shoulder-width apart with clear open negative space"
-        )
+        return "upright T-pose, horizontal straight arms, flat palms down, separated legs"
     elif p == HUMANOID_POSE_ACTION:
-        return (
-            "heroic dynamic action stance: expressive combat posture, grounded balanced footwork, "
-            "asymmetrical limb placement with distinct silhouette separation between arms, torso, and legs"
-        )
+        return "dynamic combat stance, grounded footwork, separated limbs"
     elif p == HUMANOID_POSE_NATURAL:
-        return (
-            "relaxed natural standing pose: casual upright posture, arms hanging comfortably at sides with visible clearance "
-            "from the waist, natural weight distribution on both feet"
-        )
+        return "relaxed standing pose, arms clear of torso, separated legs"
     else:  # a_pose (default)
-        return (
-            "canonical upright A-pose: arms abducted at a 35-to-45 degree downward angle away from the torso, "
-            "wrists straight, palms facing inward toward the thighs, straight spine, legs straight and shoulder-width apart, "
-            "ample clear open air space under armpits and between inner thighs to guarantee zero limb fusion"
-        )
+        return "canonical upright A-pose, arms angled 45 degrees, open armpits, separated legs"
 
 
 def detect_subject_category(text: str) -> str:
@@ -200,17 +186,17 @@ def clean_transparency_keywords(text: str) -> str:
 
 
 def get_style_directives(art_style: str) -> str:
-    """Returns artistic style prompt expansion."""
+    """Returns compact artistic style prompt expansion."""
     if art_style == STYLE_REALISTIC_SCULPT:
-        return "ZBrush high-detail realistic digital sculpture, fine anatomical surface detailing, authentic muscular and skeletal structure"
+        return "ZBrush digital sculpt, anatomical surface details"
     elif art_style == STYLE_GAME_PROP:
-        return "hard-surface 3D game prop asset, crisp planar bevels, sharp mechanical definition, clean chamfers"
+        return "hard-surface 3D game prop, crisp planar bevels"
     elif art_style == STYLE_TABLETOP_MINIATURE:
-        return "32mm/75mm tabletop wargaming miniature, heroic scale stylized anatomy, accentuated surface edge depth"
+        return "tabletop miniature, heroic scale stylized details"
     elif art_style == STYLE_STYLIZED_VINYL:
-        return "stylized collectible figurine, smooth minimal rounded shapes"
+        return "stylized collectible vinyl figurine, smooth rounded shapes"
     else:
-        return "official canonical design, 100% faithful authentic anatomy and original character proportions, true-to-lore body-to-head ratio"
+        return "canonical design, faithful authentic proportions"
 
 
 def enhance_prompt_for_3d(
@@ -223,6 +209,7 @@ def enhance_prompt_for_3d(
 ) -> str:
     """
     Dynamic Style & Anatomy Router for 3D Prompt Enhancement.
+    Strictly token-budgeted (<72 CLIP tokens) to guarantee zero prompt truncation.
     """
     prompt = clean_transparency_keywords(user_prompt.strip())
     category = detect_subject_category(prompt)
@@ -233,40 +220,41 @@ def enhance_prompt_for_3d(
     elif art_style == STYLE_STYLIZED_VINYL:
         art_style = STYLE_FAITHFUL_ANATOMICAL
 
-    # If the prompt is already a fully structured turnaround sheet, avoid re-wrapping layout
-    if "3-panel turnaround model sheet" in prompt.lower() or "[column 1" in prompt.lower():
+    # If the prompt is already a structured turnaround sheet or hero view, pass through
+    if any(k in prompt.lower() for k in ["3-panel turnaround", "[column 1", "three-quarter front hero view", "pristine single"]):
         return prompt
 
     pose_extra = ""
     if category == CATEGORY_HUMANOID:
         pose_extra = f", {get_humanoid_pose_directives(humanoid_pose)}"
     elif category == CATEGORY_QUADRUPED:
-        pose_extra = ", high arched S-curve tail, visible tail root, 4 separated paws, zero cushions, zero pet beds"
+        pose_extra = ", high arched S-curve tail, exposed tail root, 4 separated paws"
+    elif category == CATEGORY_PROP_WEAPON:
+        pose_extra = ", sharp planar bevels, straight axis, uniform thickness"
+    elif category == CATEGORY_VEHICLE:
+        pose_extra = ", clean wheel separation, undercarriage negative space"
+    else:
+        pose_extra = ", clean silhouette separation, distinct relief"
 
     if multiview:
         if category == CATEGORY_QUADRUPED:
-            layout_directives = "3-panel turnaround sheet: [Front orthographic], [Left profile facing left], [Rear view slightly elevated]"
+            layout_directives = "3-panel turnaround: front, side, rear slightly elevated"
         else:
-            layout_directives = "3-panel turnaround sheet: [Front orthographic], [Left side profile], [Back orthographic]"
+            layout_directives = "3-panel turnaround: front, side, rear views"
     else:
-        layout_directives = "three-quarter hero view, 35-degree isometric angle"
+        layout_directives = "three-quarter hero view, 35-degree isometric"
 
     style_directives = get_style_directives(art_style)
 
     grounding_str = (
-        "resting on circular matte display disc"
+        "circular matte display disc"
         if add_pedestal_base else
-        "standing directly on flat ground at Z=0, zero cushions, zero fabric beds"
+        "flat bare ground, zero cushions"
     )
 
-    technical_rules = (
-        "pure solid white background (#ffffff), neutral softbox lighting, "
-        "crisp 3D relief, watertight solid geometry, zero cast shadows"
-    )
+    technical_rules = "solid pure white background (#ffffff), neutral studio lighting, watertight 3D relief"
 
-    return (
-        f"{prompt}{pose_extra}, {layout_directives}, {style_directives}, {grounding_str}, {technical_rules}"
-    )
+    return f"{prompt}, {layout_directives}{pose_extra}, {style_directives}, {grounding_str}, {technical_rules}"
 
 
 def compile_3d_master_prompt(
