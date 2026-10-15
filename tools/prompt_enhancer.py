@@ -54,7 +54,7 @@ def get_humanoid_pose_directives(pose: str = HUMANOID_POSE_A) -> str:
     elif p == HUMANOID_POSE_NATURAL:
         return "relaxed standing pose, arms clear of torso, separated legs"
     else:  # a_pose (default)
-        return "canonical upright A-pose, angled arms, open armpits, separated legs"
+        return "canonical upright A-pose, open armpits, separated legs, symmetrical face, clean sculpted hands, defined boots"
 
 
 def detect_subject_category(text: str) -> str:
@@ -245,7 +245,7 @@ def enhance_prompt_for_3d(
         else:
             layout_directives = "3-panel turnaround: front, side, rear views"
     else:
-        layout_directives = "single three-quarter hero view, 35-degree isometric, centered"
+        layout_directives = "three-quarter hero view, 35-degree isometric"
 
     style_directives = get_style_directives(art_style)
 
@@ -255,7 +255,7 @@ def enhance_prompt_for_3d(
         "flat ground, zero cushions"
     )
 
-    technical_rules = "pure white background (#ffffff), studio lighting, 3D relief"
+    technical_rules = "pure white background (#ffffff), zero aura, 3D relief"
 
     return f"{prompt}, {layout_directives}{pose_extra}, {style_directives}, {grounding_str}, {technical_rules}"
 

@@ -41,14 +41,14 @@ class ConceptEngine:
         device = hw.get_torch_device()
         dtype = hw.get_torch_dtype()
 
-        print(f"[ConceptEngine] Loading SDXL-Lightning 4-step on {hw.device_info['name']} ({dtype})...")
+        print(f"[ConceptEngine] Loading SDXL-Lightning 8-step on {hw.device_info['name']} ({dtype})...")
 
-        local_cached_unet = Path("models/sdxl_lightning_4step_unet")
+        local_cached_unet = Path("models/sdxl_lightning_8step_unet")
 
         try:
             if not (local_cached_unet / "config.json").exists() or not (local_cached_unet / "diffusion_pytorch_model.safetensors").exists():
                 local_cached_unet.mkdir(parents=True, exist_ok=True)
-                ckpt_path = hf_hub_download(SDXL_LIGHTNING_REPO, SDXL_LIGHTNING_CKPT)
+                ckpt_path = hf_hub_download(SDXL_LIGHTNING_REPO, "sdxl_lightning_8step_unet.safetensors")
                 unet_config = UNet2DConditionModel.load_config(SDXL_MODEL_ID, subfolder="unet")
                 unet = UNet2DConditionModel.from_config(unet_config).to(dtype=dtype)
                 state_dict = load_file(ckpt_path)
@@ -138,11 +138,11 @@ class ConceptEngine:
         if seed is not None and torch is not None:
             generator = torch.Generator(device="cpu").manual_seed(seed)
 
-        print(f"[ConceptEngine] Running 4-step SDXL-Lightning inference in torch.inference_mode (seed={seed})...")
+        print(f"[ConceptEngine] Running 8-step SDXL-Lightning inference in torch.inference_mode (seed={seed})...")
         with torch.inference_mode():
             image = pipe(
                 prompt=enhanced_prompt,
-                num_inference_steps=4,
+                num_inference_steps=8,
                 guidance_scale=0.0,
                 width=width,
                 height=height,
