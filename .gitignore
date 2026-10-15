@@ -48,7 +48,8 @@ yarn-error.log*
 .vscode/
 *.swp
 *.swo
-.antigravity/
+.antigravity/*
+!.antigravity/rules.md
 
 # Local3D Studio Generated Outputs (Models, STL, GLB, Render sheets, Caches, State)
 output/*
