@@ -54,7 +54,7 @@ def get_humanoid_pose_directives(pose: str = HUMANOID_POSE_A) -> str:
     elif p == HUMANOID_POSE_NATURAL:
         return "relaxed standing pose, arms clear of torso, separated legs"
     else:  # a_pose (default)
-        return "canonical upright A-pose, arms angled 45 degrees, open armpits, separated legs"
+        return "canonical upright A-pose, angled arms, open armpits, separated legs"
 
 
 def detect_subject_category(text: str) -> str:
@@ -112,7 +112,7 @@ def detect_subject_category(text: str) -> str:
         "man", "woman", "person", "human", "character", "warrior", "knight",
         "soldier", "boy", "girl", "hero", "superhero", "wizard", "monk",
         "ninja", "samurai", "cyborg", "android", "anime", "guy", "lady",
-        "biped", "pikachu",
+        "biped", "pikachu", "goku", "saiyan", "vegeta", "naruto", "luffy",
         "santa", "santa claus", "babbo natale", "elf", "elfo", "dwarf", "nano",
         "gnome", "gnomo", "goblin", "orc", "orco", "zombie", "alien", "alieno",
         "vampire", "vampiro", "skeleton", "scheletro", "pirate", "pirata", "clown",
@@ -188,15 +188,15 @@ def clean_transparency_keywords(text: str) -> str:
 def get_style_directives(art_style: str) -> str:
     """Returns compact artistic style prompt expansion."""
     if art_style == STYLE_REALISTIC_SCULPT:
-        return "ZBrush digital sculpt, anatomical surface details"
+        return "ZBrush digital sculpt, anatomical details"
     elif art_style == STYLE_GAME_PROP:
-        return "hard-surface 3D game prop, crisp planar bevels"
+        return "hard-surface 3D game prop, planar bevels"
     elif art_style == STYLE_TABLETOP_MINIATURE:
-        return "tabletop miniature, heroic scale stylized details"
+        return "tabletop miniature, stylized details"
     elif art_style == STYLE_STYLIZED_VINYL:
-        return "stylized collectible vinyl figurine, smooth rounded shapes"
+        return "stylized collectible vinyl figurine, smooth shapes"
     else:
-        return "canonical design, faithful authentic proportions"
+        return "faithful canonical design"
 
 
 def enhance_prompt_for_3d(
@@ -242,17 +242,17 @@ def enhance_prompt_for_3d(
         else:
             layout_directives = "3-panel turnaround: front, side, rear views"
     else:
-        layout_directives = "single solo three-quarter hero view, 35-degree isometric, centered isolated"
+        layout_directives = "single three-quarter hero view, 35-degree isometric, centered"
 
     style_directives = get_style_directives(art_style)
 
     grounding_str = (
-        "circular matte display disc"
+        "matte display disc"
         if add_pedestal_base else
-        "flat bare ground, zero cushions"
+        "flat ground, zero cushions"
     )
 
-    technical_rules = "solid pure white background (#ffffff), neutral studio lighting, watertight 3D relief"
+    technical_rules = "solid pure white background (#ffffff), studio lighting, watertight 3D relief"
 
     return f"{prompt}, {layout_directives}{pose_extra}, {style_directives}, {grounding_str}, {technical_rules}"
 

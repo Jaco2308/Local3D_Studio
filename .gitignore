@@ -53,6 +53,7 @@ yarn-error.log*
 # Local3D Studio Generated Outputs (Models, STL, GLB, Render sheets, Caches, State)
 output/*
 !output/.gitkeep
+models/
 
 # Logs
 *.log
