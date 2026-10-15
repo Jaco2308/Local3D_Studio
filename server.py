@@ -146,36 +146,48 @@ def compile_3d_master_prompt(
     art_style: str = "faithful_anatomical",
     key_details: Optional[list] = None,
     add_pedestal_base: bool = False,
-    humanoid_pose: str = "a_pose"
+    humanoid_pose: str = "a_pose",
+    generation_strategy: str = "multiview_turnaround"
 ) -> str:
     """
-    Compiles a structured 3-Panel Orthographic Turnaround master prompt with wide margins:
-    - Left Column (0%-33%): Full-body FRONT orthographic view facing camera.
-    - Center Column (33%-66%): Full-body LEFT SIDE profile orthographic view showing separated appendages.
-    - Right Column (66%-100%): Full-body BACK orthographic view showing rear spine/anatomy.
-    Enforces wide empty neutral margins and strict non-overlapping silhouette isolation.
-    Includes canonical Humanoid Pose Guidance ('a_pose', 't_pose', 'action_pose', 'natural').
+    Compiles a structured master prompt tailored for 3D generation.
+    Supports:
+    - 'multiview_turnaround' (default): 3-Panel synchronized Front, Side, and Rear sheet with de-occlusion rules.
+    - 'single_hero_34': Meshy-style single 3/4 isometric hero angle at 35° elevation for complex occluded subjects.
     
     Args:
-        subject: Subject description (e.g. 'Western fantasy dragon', 'Pikachu').
+        subject: Subject description (e.g. 'Western fantasy dragon', 'Pikachu', 'Cat').
         art_style: 'faithful_anatomical' (default), 'realistic_sculpt', 'game_prop', etc.
         key_details: Optional list of key anatomical details to enforce.
         add_pedestal_base: Whether to add a round display disc (default: False).
         humanoid_pose: Target pose for humanoids ('a_pose', 't_pose', 'action_pose', 'natural').
+        generation_strategy: 'multiview_turnaround' (default) or 'single_hero_34'.
     """
     try:
-        from tools.prompt_enhancer import compile_3d_master_prompt as _compile
-        compiled = _compile(
-            subject=subject,
-            art_style=art_style,
-            key_details=key_details or [],
-            add_pedestal_base=add_pedestal_base,
-            humanoid_pose=humanoid_pose
-        )
+        strat = generation_strategy.lower().strip()
+        if strat == "single_hero_34":
+            from tools.prompt_enhancer import compile_single_hero_prompt as _compile_hero
+            compiled = _compile_hero(
+                subject=subject,
+                art_style=art_style,
+                key_details=key_details or [],
+                add_pedestal_base=add_pedestal_base,
+                humanoid_pose=humanoid_pose
+            )
+        else:
+            from tools.prompt_enhancer import compile_3d_master_prompt as _compile
+            compiled = _compile(
+                subject=subject,
+                art_style=art_style,
+                key_details=key_details or [],
+                add_pedestal_base=add_pedestal_base,
+                humanoid_pose=humanoid_pose
+            )
         return json.dumps({
             "subject": subject,
             "art_style": art_style,
             "humanoid_pose": humanoid_pose,
+            "generation_strategy": strat,
             "compiled_master_prompt": compiled
         }, indent=2)
     except Exception as e:
@@ -242,7 +254,8 @@ def generate_concept_image(
     art_style: str = "faithful_anatomical",
     multiview: bool = True,
     add_pedestal_base: bool = False,
-    seed: Optional[int] = None
+    seed: Optional[int] = None,
+    generation_strategy: str = "auto"
 ) -> str:
     """
     Generates a 2D concept illustration optimized for 3D photogrammetry using SDXL-Lightning (4-step, float16).
@@ -257,8 +270,15 @@ def generate_concept_image(
         multiview: Generates synchronized Front, Side, Rear model sheet (default: True).
         add_pedestal_base: Optional pedestal disc (default: False).
         seed: Random seed (default: dynamically generated random integer).
+        generation_strategy: 'auto', 'multiview_turnaround', or 'single_hero_34'.
     """
     try:
+        strat = generation_strategy.lower().strip()
+        if strat == "single_hero_34":
+            multiview = False
+        elif strat == "multiview_turnaround":
+            multiview = True
+
         from tools.concept_engine import ConceptEngine
         out_target = str(OUTPUT_DIR / f"{output_filename}.png")
         concept_path = ConceptEngine.generate_concept(
@@ -275,6 +295,7 @@ def generate_concept_image(
         gate_state["concept_path"] = abs_concept
         gate_state["approved"] = False
         gate_state["subject"] = output_filename
+        gate_state["generation_strategy"] = strat
         _save_approval_state(gate_state)
 
         return json.dumps({
@@ -283,6 +304,7 @@ def generate_concept_image(
             "concept_uri": f"file://{abs_concept}",
             "filename": Path(abs_concept).name,
             "art_style": art_style,
+            "generation_strategy": strat,
             "approved": False,
             "directive": "STOP OBBLIGATORIO: Mostra l'immagine all'utente e attendi una sua risposta esplicita prima di chiamare qualsiasi tool 3D.",
             "instructions": (
@@ -305,7 +327,8 @@ def confirm_concept_and_build_3d(
     art_style: str = "faithful_anatomical",
     target_triangles: Optional[int] = None,
     voxel_size: Optional[float] = None,
-    auto_split: bool = False
+    auto_split: bool = False,
+    generation_strategy: Optional[str] = None
 ) -> str:
     """
     CONFIRMATION GATE: Invocabile SOLO in un turno successivo, DOPO che l'utente ha esplicitamente confermato il concept 2D generato.
@@ -322,6 +345,7 @@ def confirm_concept_and_build_3d(
         target_triangles: Numero desiderato esplicito di triangoli (es. 50000, 100000, 200000, 500000).
         voxel_size: Risoluzione voxel remesh in metri (es. 0.0025, 0.0015).
         auto_split: Se suddividere automaticamente il modello in parti con connettori (default: False).
+        generation_strategy: 'auto', 'multiview_turnaround', o 'single_hero_34'.
     """
     gate_state = _load_approval_state()
     target_image = concept_path or gate_state.get("concept_path")
@@ -343,10 +367,13 @@ def confirm_concept_and_build_3d(
             if local_mode in ["fast_draft", "ultra_production"]:
                 effective_preset = local_mode
 
+        effective_strategy = generation_strategy or gate_state.get("generation_strategy", "auto")
+
         result = PipelineEngine.run_pipeline(
             image_path=target_image,
             output_name=output_filename,
             quality_preset=effective_preset,
+            generation_strategy=effective_strategy,
             target_height_mm=target_height_mm,
             add_pedestal=add_pedestal,
             art_style=art_style,

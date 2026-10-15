@@ -93,6 +93,13 @@ class ConceptEngine:
         if seed is None:
             seed = random.randint(1, 99999999)
 
+        if multiview:
+            if width == 1024 and height == 1024:
+                width, height = 1536, 512
+        else:
+            if width == 1536 and height == 512:
+                width, height = 1024, 1024
+
         enhanced_prompt = enhance_prompt_for_3d(
             user_prompt=user_prompt,
             mode=mode,
@@ -100,7 +107,7 @@ class ConceptEngine:
             multiview=multiview,
             add_pedestal_base=add_pedestal_base
         )
-        print(f"[ConceptEngine] Enhanced Prompt ({art_style}, seed={seed}): {enhanced_prompt}")
+        print(f"[ConceptEngine] Enhanced Prompt ({art_style}, seed={seed}, res={width}x{height}): {enhanced_prompt}")
 
         if output_path is None:
             output_path = str(OUTPUT_DIR / "concept_latest.png")

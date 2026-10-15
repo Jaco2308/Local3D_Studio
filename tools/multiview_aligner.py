@@ -75,25 +75,21 @@ class MultiviewAligner:
         center_x = w / 2.0
         center_y = h / 2.0
 
-        best_label = 1
-        best_score = -1.0
-
+        # Keep components that are either the best label OR central features (not boundary bleeds)
+        keep_mask = np.zeros_like(mask, dtype=bool)
         for feat_id in range(1, num_features + 1):
             feat_mask = (labeled_array == feat_id)
             area = np.sum(feat_mask)
-            if area < 80:  # Ignore tiny noise specks
+            if area < 30:  # Ignore microscopic noise specks
                 continue
 
             cy, cx = center_of_mass(feat_mask)
-            dx = abs(cx - center_x)
-            norm_dx = dx / (w * 0.35 + 1e-5)
-            score = float(area) / (1.0 + (norm_dx ** 3))
+            is_edge_bleed = (cx < w * 0.12) or (cx > w * 0.88)
+            # Retain dominant feature as well as central appendages (e.g. high tails, ears, held accessories)
+            if feat_id == best_label or not is_edge_bleed:
+                keep_mask |= feat_mask
 
-            if score > best_score:
-                best_score = score
-                best_label = feat_id
-
-        cleaned_alpha = np.where(labeled_array == best_label, alpha, 0).astype(np.uint8)
+        cleaned_alpha = np.where(keep_mask, alpha, 0).astype(np.uint8)
         cleaned_rgba = rgba_np.copy()
         cleaned_rgba[:, :, 3] = cleaned_alpha
         return cleaned_rgba
@@ -303,8 +299,8 @@ class MultiviewAligner:
 
             canvas = Image.new("RGBA", (cls.TARGET_CANVAS_SIZE, cls.TARGET_CANVAS_SIZE), (0, 0, 0, 0))
             px = (cls.TARGET_CANVAS_SIZE - nw) // 2
-            # Ground foot plane at Y_OFFSET_BOTTOM (456)
-            py = cls.Y_OFFSET_BOTTOM - nh
+            # Ground foot plane at Y_OFFSET_BOTTOM (456), clamped to prevent top clipping
+            py = max(0, cls.Y_OFFSET_BOTTOM - nh)
             canvas.paste(resized, (px, py), mask=resized)
             return canvas
 

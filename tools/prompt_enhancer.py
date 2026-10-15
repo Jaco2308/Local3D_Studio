@@ -99,13 +99,14 @@ def detect_subject_category(text: str) -> str:
     ]
 
     quadruped_keywords = [
-        "dog", "cat", "puppy", "kitten", "dragon", "horse", "lion", "tiger",
+        "dog", "cat", "puppy", "kitten", "feline", "dragon", "horse", "lion", "tiger",
         "wolf", "bear", "dinosaur", "creature", "reptile", "lizard", "monster",
         "beast", "fox", "hound", "leopard", "cheetah", "panther", "rhino",
-        "elephant", "hippo", "deer", "stag", "quadruped", "dino",
-        "cane", "gatto", "cucciolo", "gattino", "drago", "cavallo", "leone", "tigre",
+        "elephant", "hippo", "deer", "stag", "quadruped", "dino", "rabbit", "bunny",
+        "cavy", "squirrel", "raccoon", "badger", "boar", "pig", "cow", "bull",
+        "cane", "gatto", "cucciolo", "gattino", "felino", "drago", "cavallo", "leone", "tigre",
         "lupo", "orso", "dinosauro", "mostro", "creatura", "bestia", "volpe",
-        "levriero", "pantera", "rinoceronte", "elefante", "cervo"
+        "levriero", "pantera", "rinoceronte", "elefante", "cervo", "coniglio", "scoiattolo"
     ]
 
     fauna_keywords = [
@@ -115,11 +116,17 @@ def detect_subject_category(text: str) -> str:
         "balena", "delfino", "serpente", "vipera", "polpo", "ragno", "insetto"
     ]
 
+    # Format/style keywords that should NOT force humanoid classification
+    representation_format_keywords = [
+        "figure", "figurine", "statue", "statuetta", "statuina", "chibi",
+        "funko", "toy", "pop", "miniature", "sculpture", "scultura", "model"
+    ]
+
     humanoid_keywords = [
         "man", "woman", "person", "human", "character", "warrior", "knight",
         "soldier", "boy", "girl", "hero", "superhero", "wizard", "monk",
         "ninja", "samurai", "cyborg", "android", "anime", "guy", "lady",
-        "figure", "figurine", "biped", "pikachu", "chibi", "statue",
+        "biped", "pikachu",
         "santa", "santa claus", "babbo natale", "elf", "elfo", "dwarf", "nano",
         "gnome", "gnomo", "goblin", "orc", "orco", "zombie", "alien", "alieno",
         "vampire", "vampiro", "skeleton", "scheletro", "pirate", "pirata", "clown",
@@ -127,7 +134,7 @@ def detect_subject_category(text: str) -> str:
         "principessa", "priest", "prete", "farmer", "contadino", "babbo",
         "uomo", "donna", "persona", "umano", "personaggio", "guerriero",
         "cavaliere", "soldato", "ragazzo", "ragazza", "eroe", "mago", "monaco",
-        "statuetta", "statuina", "paladino"
+        "paladino"
     ]
 
     has_weapon = any(k in lower for k in weapon_keywords)
@@ -136,12 +143,19 @@ def detect_subject_category(text: str) -> str:
     has_fauna = any(k in lower for k in fauna_keywords)
     has_humanoid = any(k in lower for k in humanoid_keywords)
 
-    # If prompt starts with a weapon keyword (e.g. "sword of knight", "spada del cavaliere")
-    first_word = lower.split()[0] if lower.split() else ""
-    if any(k in first_word for k in ["sword", "blade", "axe", "shield", "bow", "hammer", "spada", "lama", "ascia", "scudo", "pugnale", "dagger"]):
+    # First words intent check
+    first_two_words = " ".join(lower.split()[:2]) if lower.split() else ""
+    if any(k in first_two_words for k in ["sword", "blade", "axe", "shield", "bow", "hammer", "spada", "lama", "ascia", "scudo", "pugnale", "dagger"]):
         return CATEGORY_PROP_WEAPON
+    if any(k in first_two_words for k in quadruped_keywords):
+        return CATEGORY_QUADRUPED
+    if any(k in first_two_words for k in vehicle_keywords):
+        return CATEGORY_VEHICLE
 
-    # Otherwise, characters and creatures are prioritized over held accessories
+    # Specific taxonomic creatures take precedence over generic humanoid words
+    if has_quad and not (has_humanoid and any(w in lower for w in ["riding", "mounted", "rider", "in groppa", "a cavallo"])):
+        return CATEGORY_QUADRUPED
+
     if has_humanoid:
         return CATEGORY_HUMANOID
 
@@ -219,9 +233,19 @@ def enhance_prompt_for_3d(
     elif art_style == STYLE_STYLIZED_VINYL:
         art_style = STYLE_FAITHFUL_ANATOMICAL
 
+    # If the prompt is already a fully structured turnaround sheet, avoid re-wrapping layout
+    if "3-panel turnaround model sheet" in prompt.lower() or "[column 1" in prompt.lower():
+        return prompt
+
     pose_extra = ""
     if category == CATEGORY_HUMANOID:
         pose_extra = f", {get_humanoid_pose_directives(humanoid_pose)}"
+    elif category == CATEGORY_QUADRUPED:
+        pose_extra = (
+            ", proud open quadruped posture, tail arched high in an expressive S-curve away from the hips "
+            "with the tail root and lower spine attachment 100% visible and unobstructed, all 4 legs clearly separated "
+            "with open air clearance, zero cushions, zero pet beds, zero wrapping fabric"
+        )
 
     technical_rules = (
         f"centered full subject{pose_extra}, neutral studio softbox lighting from all directions, even albedo, "
@@ -242,22 +266,31 @@ def enhance_prompt_for_3d(
     if add_pedestal_base:
         grounding_directives = (
             "resting firmly on a solid flat circular matte grey display pedestal with clean bevelled edges "
-            "flush with the ground plane, perfectly flat bottom base"
+            "flush with the ground plane, perfectly flat bottom base, strictly no soft cushions, pet beds, or fabric"
         )
     else:
         grounding_directives = (
-            "standing or resting naturally and directly on the ground plane at Z=0 without any artificial pedestal disc, "
-            "self-supporting base with a flat grounded footprint for print bed adhesion"
+            "standing or resting naturally and directly on the bare ground plane at Z=0 without any artificial pedestal disc, "
+            "self-supporting base with a flat grounded footprint for print bed adhesion, strictly zero pet beds, zero cushions, zero pillows, zero fabric rugs"
         )
 
     if multiview:
-        layout_directives = (
-            "3-view character model sheet showing three synchronized orthographic angles side-by-side in one image: "
-            "[Left: Front Orthographic View], "
-            "[Center: Left Side Profile View showing distinct appendage depth and clear silhouette], "
-            "[Right: Back Orthographic View showing rear spine and anatomy]. "
-            "Perfect anatomical consistency across all 3 views, perfectly aligned horizontal eyelines"
-        )
+        if category == CATEGORY_QUADRUPED:
+            layout_directives = (
+                "3-view character model sheet showing three synchronized orthographic angles side-by-side in one image: "
+                "[Left: Front Orthographic View showing all 4 separated paws], "
+                "[Center: Left Side Profile View strictly facing LEFT showing distinct legs and high raised S-curve tail with fully exposed tail root attachment], "
+                "[Right: Rear Orthographic View with slight 10-degree downward elevation showing dorsal spine and fully exposed tail origin]. "
+                "Perfect anatomical consistency across all 3 views, perfectly aligned horizontal eyelines"
+            )
+        else:
+            layout_directives = (
+                "3-view character model sheet showing three synchronized orthographic angles side-by-side in one image: "
+                "[Left: Front Orthographic View], "
+                "[Center: Left Side Profile View showing distinct appendage depth and clear silhouette], "
+                "[Right: Back Orthographic View showing rear spine and anatomy]. "
+                "Perfect anatomical consistency across all 3 views, perfectly aligned horizontal eyelines"
+            )
     else:
         layout_directives = "front-three-quarter orthographic hero angle, full body view, centered"
 
@@ -295,11 +328,18 @@ def compile_3d_master_prompt(
     if key_details and len(key_details) > 0:
         details_str = f", key anatomical details: {', '.join(key_details)}"
 
-    grounding_str = (
-        "resting firmly on a solid flat circular matte grey display pedestal with bevelled rim flush with ground"
-        if add_pedestal_base else
-        "grounded naturally and solidly on the floor plane at Z=0 without any artificial pedestal disc"
-    )
+    if category == CATEGORY_QUADRUPED:
+        grounding_str = (
+            "resting firmly on a solid flat circular matte grey display pedestal with bevelled rim flush with ground, strictly no soft cushions, pet beds, or fabric"
+            if add_pedestal_base else
+            "grounded naturally and solidly on the bare flat floor plane at Z=0, strictly zero pet beds, zero cushions, zero pillows, zero fabric rugs"
+        )
+    else:
+        grounding_str = (
+            "resting firmly on a solid flat circular matte grey display pedestal with bevelled rim flush with ground"
+            if add_pedestal_base else
+            "grounded naturally and solidly on the floor plane at Z=0 without any artificial pedestal disc"
+        )
 
     # Adaptive columns and de-occlusion rules based on subject category
     if category == CATEGORY_HUMANOID:
@@ -318,17 +358,18 @@ def compile_3d_master_prompt(
     elif category == CATEGORY_QUADRUPED:
         columns_spec = (
             f"A horizontal 3-panel turnaround model sheet of {subj}: "
-            f"[Column 1 (0%-33%): Full-body FRONT orthographic view of {subj}, facing straight at camera, wide staggered stance showing all 4 distinct legs and paws clearly separated], "
-            f"[Column 2 (33%-66%): Full-body LEFT SIDE profile orthographic view of the exact same {subj}, strictly facing LEFT, open staggered gait with both front and rear legs visible, wings or back features raised high], "
-            f"[Column 3 (66%-100%): Full-body BACK orthographic view of the exact same {subj}, clearly showing rear haunches, spine attachment, and clean tail extension]"
+            f"[Column 1 (0%-33%): Full-body FRONT orthographic view of {subj}, facing straight at camera, wide open stance showing all 4 distinct legs and paws separated with clear air space], "
+            f"[Column 2 (33%-66%): Full-body LEFT SIDE profile orthographic view of the exact same {subj}, strictly facing LEFT, open stance with all legs distinct, tail arched proudly high and upward in an S-curve away from the hips, with the exact root junction and attachment point at the sacrum / lower spine 100% visible, unobstructed, and exposed], "
+            f"[Column 3 (66%-100%): Full-body REAR orthographic view of the exact same {subj} captured at a slightly elevated 10-to-15 degree downward pitch looking over the back of the head, clearly revealing the dorsal spine, rear haunches, and the complete exposed origin point and base of the raised tail]"
         )
         deocclusion_rules = (
-            "MANDATORY ZERO SELF-OCCLUSION RULE: "
-            "all 4 legs (both front legs AND both hind legs/haunches) must be 100% unobstructed, distinct, and clearly separated with visible empty air space between limbs. "
-            "Any wings or side appendages raised high above the waist, NEVER hanging down over the hips, thighs, or hind legs. "
-            "Staggered wide stance: rear legs clearly visible outside front legs. "
-            "Tail extending cleanly behind along the floor without wrapping over or in front of the legs. "
-            "Deep sculpted ambient occlusion crevices separating foreground limbs from background limbs"
+            "MANDATORY QUADRUPED ZERO SELF-OCCLUSION & EXPOSED TAIL ROOT RULE: "
+            "Tail must be held arched proudly upward or curving high away from the rear legs in an expressive S-curve; "
+            "the base attachment of the tail root to the lower spine and pelvis must be 100% visible, unobstructed, and clearly exposed from both side profile and rear views, never tucked, never hidden between legs. "
+            "All 4 legs and paws must be 100% unobstructed with visible empty air space between limbs. "
+            "ZERO PARASITIC ACCESSORIES: strictly sitting or standing directly on the bare flat ground plane at Z=0, "
+            "strictly zero pet beds, zero cushions, zero pillows, zero fabric blankets, zero baskets, zero wrapping cloth under the body. "
+            "Deep sculpted ambient occlusion crevices separating foreground limbs, hind legs, tail root, and body volume"
         )
     elif category == CATEGORY_PROP_WEAPON:
         columns_spec = (
@@ -409,11 +450,18 @@ def compile_single_hero_prompt(
     if key_details and len(key_details) > 0:
         details_str = f", key anatomical details: {', '.join(key_details)}"
 
-    grounding_str = (
-        "resting firmly on a solid flat circular matte grey display pedestal with bevelled rim flush with ground"
-        if add_pedestal_base else
-        "grounded naturally and solidly on the floor plane at Z=0 without any artificial pedestal disc"
-    )
+    if category == CATEGORY_QUADRUPED:
+        grounding_str = (
+            "resting firmly on a solid flat circular matte grey display pedestal with bevelled rim flush with ground, strictly no soft cushions, pet beds, or fabric"
+            if add_pedestal_base else
+            "grounded naturally and solidly on the bare floor plane at Z=0, strictly zero pet beds, zero cushions, zero pillows, zero fabric rugs"
+        )
+    else:
+        grounding_str = (
+            "resting firmly on a solid flat circular matte grey display pedestal with bevelled rim flush with ground"
+            if add_pedestal_base else
+            "grounded naturally and solidly on the floor plane at Z=0 without any artificial pedestal disc"
+        )
 
     pose_desc = f" in {get_humanoid_pose_directives(humanoid_pose)}" if category == CATEGORY_HUMANOID else ""
 
@@ -436,6 +484,13 @@ def compile_single_hero_prompt(
         chromatic_separation = (
             "RICH CHROMATIC ALBEDO SEPARATION: distinct color values between skin, clothing layers, armor, and hair. "
             "Visible negative space between arms and torso and between legs, allowing vision encoders to cleanly differentiate depth layers"
+        )
+    elif category == CATEGORY_QUADRUPED:
+        chromatic_separation = (
+            "RICH CHROMATIC ALBEDO SEPARATION & DORSAL CLARITY: distinct high-contrast color values between fur markings, paws, and underbelly. "
+            "Captured at an elevated 35-degree isometric angle clearly showing the front face, side profile, "
+            "unobstructed dorsal spine, and high-raised tail with completely visible tail root. "
+            "Strictly resting directly on the ground plane, zero cushions, zero pet beds, zero fabric folds"
         )
     else:
         chromatic_separation = (
