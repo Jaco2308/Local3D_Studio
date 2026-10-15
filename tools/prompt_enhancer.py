@@ -241,64 +241,31 @@ def enhance_prompt_for_3d(
     if category == CATEGORY_HUMANOID:
         pose_extra = f", {get_humanoid_pose_directives(humanoid_pose)}"
     elif category == CATEGORY_QUADRUPED:
-        pose_extra = (
-            ", proud open quadruped posture, tail arched high in an expressive S-curve away from the hips "
-            "with the tail root and lower spine attachment 100% visible and unobstructed, all 4 legs clearly separated "
-            "with open air clearance, zero cushions, zero pet beds, zero wrapping fabric"
-        )
-
-    technical_rules = (
-        f"centered full subject{pose_extra}, neutral studio softbox lighting from all directions, even albedo, "
-        "no harsh cast shadows, zero specular glare, pure solid uniform neutral white background (#ffffff), "
-        "clear silhouette separation, crisp 3D surface relief, watertight solid geometry, "
-        "distinct well-articulated 3D shapes with defined depth around every limb and appendage, "
-        "zero flat backdrop slabs, zero tombstone wall fusion, zero relief plaque melting"
-    )
-
-    monochrome_sculpt_rules = (
-        "tangible physical 3D relief on all details, recessed eye sockets with raised pupils, "
-        "sculpted mouth cavity depth, raised anatomical contour lines casting distinct physical shadows "
-        "for single-color monochrome 3D printing"
-    )
-
-    style_directives = get_style_directives(art_style)
-
-    if add_pedestal_base:
-        grounding_directives = (
-            "resting firmly on a solid flat circular matte grey display pedestal with clean bevelled edges "
-            "flush with the ground plane, perfectly flat bottom base, strictly no soft cushions, pet beds, or fabric"
-        )
-    else:
-        grounding_directives = (
-            "standing or resting naturally and directly on the bare ground plane at Z=0 without any artificial pedestal disc, "
-            "self-supporting base with a flat grounded footprint for print bed adhesion, strictly zero pet beds, zero cushions, zero pillows, zero fabric rugs"
-        )
+        pose_extra = ", high arched S-curve tail, visible tail root, 4 separated paws, zero cushions, zero pet beds"
 
     if multiview:
         if category == CATEGORY_QUADRUPED:
-            layout_directives = (
-                "3-view character model sheet showing three synchronized orthographic angles side-by-side in one image: "
-                "[Left: Front Orthographic View showing all 4 separated paws], "
-                "[Center: Left Side Profile View strictly facing LEFT showing distinct legs and high raised S-curve tail with fully exposed tail root attachment], "
-                "[Right: Rear Orthographic View with slight 10-degree downward elevation showing dorsal spine and fully exposed tail origin]. "
-                "Perfect anatomical consistency across all 3 views, perfectly aligned horizontal eyelines"
-            )
+            layout_directives = "3-panel turnaround sheet: [Front orthographic], [Left profile facing left], [Rear view slightly elevated]"
         else:
-            layout_directives = (
-                "3-view character model sheet showing three synchronized orthographic angles side-by-side in one image: "
-                "[Left: Front Orthographic View], "
-                "[Center: Left Side Profile View showing distinct appendage depth and clear silhouette], "
-                "[Right: Back Orthographic View showing rear spine and anatomy]. "
-                "Perfect anatomical consistency across all 3 views, perfectly aligned horizontal eyelines"
-            )
+            layout_directives = "3-panel turnaround sheet: [Front orthographic], [Left side profile], [Back orthographic]"
     else:
-        layout_directives = "front-three-quarter orthographic hero angle, full body view, centered"
+        layout_directives = "three-quarter hero view, 35-degree isometric angle"
 
-    mode_extra = "structural stability, manifold solid volume, print bed adhesion calibrated"
+    style_directives = get_style_directives(art_style)
+
+    grounding_str = (
+        "resting on circular matte display disc"
+        if add_pedestal_base else
+        "standing directly on flat ground at Z=0, zero cushions, zero fabric beds"
+    )
+
+    technical_rules = (
+        "pure solid white background (#ffffff), neutral softbox lighting, "
+        "crisp 3D relief, watertight solid geometry, zero cast shadows"
+    )
 
     return (
-        f"{prompt}, {style_directives}, {layout_directives}, {technical_rules}, "
-        f"{monochrome_sculpt_rules}, {grounding_directives}, {mode_extra}"
+        f"{prompt}{pose_extra}, {layout_directives}, {style_directives}, {grounding_str}, {technical_rules}"
     )
 
 

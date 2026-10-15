@@ -43,13 +43,12 @@ class ConceptEngine:
         print(f"[ConceptEngine] Loading SDXL-Lightning 4-step on {hw.device_info['name']} ({dtype})...")
 
         try:
-            # Check for direct UNet checkpoint from ByteDance/SDXL-Lightning
-            unet = UNet2DConditionModel.from_pretrained(
-                SDXL_LIGHTNING_REPO,
-                subfolder="",
-                weight_name=SDXL_LIGHTNING_CKPT,
-                torch_dtype=dtype
-            )
+            # Load UNet configuration from base SDXL and load weights from ByteDance/SDXL-Lightning
+            ckpt_path = hf_hub_download(SDXL_LIGHTNING_REPO, SDXL_LIGHTNING_CKPT)
+            unet_config = UNet2DConditionModel.load_config(SDXL_MODEL_ID, subfolder="unet")
+            unet = UNet2DConditionModel.from_config(unet_config).to(dtype=dtype)
+            unet.load_state_dict(load_file(ckpt_path))
+
             pipe = StableDiffusionXLPipeline.from_pretrained(
                 SDXL_MODEL_ID,
                 unet=unet,
