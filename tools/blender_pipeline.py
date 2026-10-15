@@ -133,7 +133,7 @@ if len(mesh_objs) > 1:
     bpy.ops.object.join()
 target_obj = bpy.context.active_object
 
-# 2. Intelligent Debris Filter: separate loose parts, remove tiny noise crumbs (<2.5%), keep legitimate pieces
+# 2. Main Shell Enforcer: separate loose parts, retain ONLY the primary main object shell, and purge all floating debris
 bpy.ops.object.mode_set(mode='EDIT')
 bpy.ops.mesh.select_all(action='SELECT')
 bpy.ops.mesh.separate(type='LOOSE')
@@ -144,25 +144,16 @@ if not all_mesh_objs:
     raise RuntimeError('No mesh objects remaining after loose separation.')
 
 main_obj = max(all_mesh_objs, key=lambda o: len(o.data.vertices))
-main_vert_count = len(main_obj.data.vertices)
 
-# Keep main object and any significant accessory/mount parts (>= 2.5% of main vertex count)
-# Discard only tiny floating noise specks
-kept_objs = [main_obj]
+# Purge any floating fragments, loose artifacts or disconnected shells
 for o in all_mesh_objs:
     if o != main_obj:
-        if len(o.data.vertices) < max(40, int(main_vert_count * 0.025)):
-            bpy.data.objects.remove(o, do_unlink=True)
-        else:
-            kept_objs.append(o)
+        bpy.data.objects.remove(o, do_unlink=True)
 
 bpy.ops.object.select_all(action='DESELECT')
-for o in kept_objs:
-    o.select_set(True)
+main_obj.select_set(True)
 bpy.context.view_layer.objects.active = main_obj
-if len(kept_objs) > 1:
-    bpy.ops.object.join()
-target_obj = bpy.context.active_object
+target_obj = main_obj
 
 # Clean loose vertices/edges inside mesh
 bpy.ops.object.mode_set(mode='EDIT')

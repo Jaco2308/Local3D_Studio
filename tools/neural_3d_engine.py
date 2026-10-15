@@ -169,7 +169,10 @@ class Neural3DEngine:
                 mv_front = mv_left = mv_right = mv_back = None
                 spaces = ["tencent/Hunyuan3D-2", "tencent/Hunyuan3D-2mv", "VAST-AI/TripoSG"]
 
-            # Step 3: Try Local Inference
+            # Step 3: Try Local Inference with isolated MPS memory
+            os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
+            cleanup_memory(label="Pre-Hunyuan3D Isolation")
+
             local_pipe = cls._try_load_local_hunyuan(tier=target_tier)
             if local_pipe is not None:
                 print(f"[Neural3D] Running local Hunyuan3D-{target_tier} inference (octree={target_octree}, steps={target_steps}, seed={seed})...")
@@ -183,6 +186,7 @@ class Neural3DEngine:
                 print(f"[Neural3D] Successfully exported local mesh: {output_glb_path}")
 
                 cls._local_pipeline = offload_or_cleanup(cls._local_pipeline, label=f"Hunyuan3D-{target_tier}")
+                cleanup_memory(label="Post-Local-Hunyuan3D")
                 return output_glb_path
 
             # Step 4: Resilient Gradio Client Fallback (Hugging Face Spaces)

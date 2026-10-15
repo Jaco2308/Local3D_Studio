@@ -164,18 +164,17 @@ Poi apri `http://localhost:8000` nel browser.
 
 ---
 
-## 🛠️ Riferimento Completo dei 16 Tool MCP
+## 🛠️ Riferimento Completo dei 15 Tool MCP
 
 | Nome Tool | Argomenti | Descrizione |
 |:---|:---|:---|
 | `get_hardware_status` | *(nessuno)* | Restituisce CPU, GPU (CUDA/ROCm/MPS), RAM/VRAM, Profilo di Prestazioni attivo (1-4) e percorso di Blender. |
 | `set_quality_preset` | `preset` | Imposta la modalità qualitativa (`fast_draft`, `auto`, `ultra_production`). |
 | `enhance_prompt_for_3d` | `prompt`, `mode`, `art_style`, `multiview`, `add_pedestal_base`, `humanoid_pose` | Espande prompt testuali in specifiche ottimali per la modellazione 3D attraverso 5 stili artistici. |
-| `compile_3d_master_prompt` | `subject`, `art_style`, `key_details`, `add_pedestal_base`, `humanoid_pose` | Compila un prompt a 3 viste ortografiche con ampi margini vuoti e de-occlusione anatomica. |
-| `generate_concept_image` | `prompt`, `output_filename`, `mode`, `art_style`, `multiview`, `add_pedestal_base`, `seed` | Genera il concept 2D con SDXL-Lightning (4-step float16) e attiva l'Hard Approval Gate. |
+| `compile_3d_master_prompt` | `subject`, `art_style`, `key_details`, `add_pedestal_base`, `humanoid_pose`, `generation_strategy` | Compila il prompt chirurgico Meshy AI Single-Master 3/4 per la generazione nativa Antigravity con anti-occlusione e zero-effetti. |
 | `align_multiview_concept` | `concept_path` | Calibra le viste ortografiche, isola il soggetto via connected components, fissa l'altezza Y a 400px e applica CLAHE. |
-| `confirm_concept_and_build_3d` | `concept_path`, `output_filename`, `quality_preset`, `target_height_mm`, `add_pedestal`, `art_style`, `target_triangles`, `voxel_size`, `auto_split` | **Hard Approval Gate**: Invocabile SOLO dopo approvazione utente per avviare la ricostruzione 3D e Blender. |
-| `direct_image_to_3d` | `image_path`, `output_filename`, `quality_preset`, `generation_strategy`, `add_pedestal`, `target_height_mm`, `art_style`, `target_triangles`, `voxel_size`, `auto_split` | **Alternativa Meshy AI**: Trasformazione diretta in 1 step da qualsiasi foto a modello 3D (`single_hero_34` o `multiview_turnaround`). |
+| `confirm_concept_and_build_3d` | `concept_path`, `output_filename`, `quality_preset`, `target_height_mm`, `add_pedestal`, `art_style`, `target_triangles`, `voxel_size`, `auto_split` | **Hard Approval Gate**: Invocabile dopo approvazione utente per avviare la ricostruzione 3D e Blender. |
+| `direct_image_to_3d` | `image_path`, `output_filename`, `quality_preset`, `generation_strategy`, `add_pedestal`, `target_height_mm`, `art_style`, `target_triangles`, `voxel_size`, `auto_split` | **Punto di Ingresso 3D Primario**: Converte il concept 2D o un'immagine utente in modello 3D con rembg, CLAHE, Hunyuan3D-2 e manifattura Blender. |
 | `retopologize_mesh` | `input_mesh_path`, `output_filename`, `mode`, `target_count` | **Retopology AI**: Converte mesh dense in topologia pulita: Quadriflow all-quads (rigging) o Decimate triangoli (giochi). |
 | `bake_pbr_textures` | `input_mesh_path`, `output_filename`, `texture_resolution`, `bake_normal`, `bake_ao` | **Baking PBR**: Calcola mappe di Normali tangent-space e AO tramite Blender Cycles ed esporta un GLB PBR. |
 | `auto_split_model` | `input_mesh_path`, `output_filename`, `subject_category`, `add_connectors`, `connector_size_mm`, `exploded_distance_mm` | **Auto Split & Incastri**: Suddivide la mesh in parti stagne con perni da 0.25mm, vista esplosa GLB e 3MF multi-colore. |

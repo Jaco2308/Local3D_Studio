@@ -393,3 +393,99 @@ class MultiviewAligner:
             "y_bottom": cls.Y_OFFSET_BOTTOM,
             "subject_height": effective_target_height
         }
+
+    @classmethod
+    def clean_and_calibrate_hero_image(
+        cls,
+        image_path: str,
+        output_path: str,
+        target_size: int = 512,
+        ground_y: int = 456,
+        target_height: int = 400
+    ) -> str:
+        """
+        Calibrates a single 3/4 hero view image for neural 3D reconstruction:
+        1. Strips background with rembg.
+        2. Filters for the largest connected component to eliminate stray debris/flakes.
+        3. Crops to tight bounding box and scales proportionally to target height (<= 400px).
+        4. Aligns vertically so the lowest point (feet/base) sits exactly on ground plane (Z=0 at Y=ground_y),
+           and centers horizontally on target_size x target_size canvas.
+        5. Enhances depth crevices via CLAHE on L-channel + subtle unsharp masking.
+        6. Composites onto pure solid white (#ffffff) canvas for neural 3D reconstruction.
+        """
+        image_path = os.path.abspath(image_path)
+        if not os.path.exists(image_path):
+            raise FileNotFoundError(f"Source hero image not found: {image_path}")
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f_tmp:
+            tmp_rgba_path = f_tmp.name
+
+        try:
+            # 1. Background removal to RGBA
+            BackgroundRemovalEngine.remove_background(image_path, tmp_rgba_path, replace_with_white=False)
+            with Image.open(tmp_rgba_path) as raw_rgba:
+                rgba_pil = raw_rgba.convert("RGBA")
+        finally:
+            if os.path.exists(tmp_rgba_path):
+                os.remove(tmp_rgba_path)
+
+        rgba_np = np.array(rgba_pil)
+
+        # 2. Largest connected component filter (removes any floating flakes or isolated debris)
+        from scipy.ndimage import label
+        alpha = rgba_np[:, :, 3].copy()
+        mask = alpha > 15
+        if np.any(mask):
+            labeled_array, num_features = label(mask)
+            if num_features > 1:
+                sizes = [int(np.sum(labeled_array == i)) for i in range(1, num_features + 1)]
+                best_label = int(np.argmax(sizes)) + 1
+                max_size = sizes[best_label - 1]
+                # Retain dominant subject and any connected parts >= 5% of dominant size
+                keep_mask = np.zeros_like(mask, dtype=bool)
+                for feat_id in range(1, num_features + 1):
+                    feat_mask = (labeled_array == feat_id)
+                    if feat_id == best_label or np.sum(feat_mask) >= max(30, int(max_size * 0.05)):
+                        keep_mask |= feat_mask
+                rgba_np[:, :, 3] = np.where(keep_mask, alpha, 0).astype(np.uint8)
+
+        # 3. Tight bounding box crop
+        alpha_clean = rgba_np[:, :, 3]
+        rows = np.any(alpha_clean > 15, axis=1)
+        cols = np.any(alpha_clean > 15, axis=0)
+
+        if not np.any(rows) or not np.any(cols):
+            # Fallback to white composite
+            white_fallback = Image.new("RGBA", (target_size, target_size), (255, 255, 255, 255))
+            white_fallback.paste(rgba_pil, (0, 0), mask=rgba_pil)
+            white_fallback.convert("RGB").save(output_path, "PNG")
+            return output_path
+
+        y_min, y_max = np.where(rows)[0][[0, -1]]
+        x_min, x_max = np.where(cols)[0][[0, -1]]
+        crop_pil = Image.fromarray(rgba_np).crop((x_min, y_min, x_max + 1, y_max + 1))
+
+        # 4. Proportional scaling to target height (feet locked to Z=0)
+        cw, ch = crop_pil.size
+        scale = min(target_height / float(ch), (target_size * 0.85) / float(cw))
+        new_w = max(1, int(round(cw * scale)))
+        new_h = max(1, int(round(ch * scale)))
+        resized_crop = crop_pil.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+        # 5. Depth crevice enhancement (CLAHE on L-channel + unsharp masking)
+        enhanced_crop = cls.enhance_depth_crevices(resized_crop)
+
+        # 6. Center horizontally and place feet locked at ground plane (Z=0 at Y=ground_y)
+        paste_x = (target_size - new_w) // 2
+        paste_y = ground_y - new_h
+        if paste_y < 10:
+            paste_y = 10
+
+        white_canvas = Image.new("RGBA", (target_size, target_size), (255, 255, 255, 255))
+        white_canvas.paste(enhanced_crop, (paste_x, paste_y), mask=enhanced_crop)
+
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        final_rgb = white_canvas.convert("RGB")
+        final_rgb.save(output_path, "PNG")
+        print(f"[MultiviewAligner] Cleaned and calibrated hero image saved to: {output_path} (ground_y={ground_y}, height={new_h}px)")
+        return output_path

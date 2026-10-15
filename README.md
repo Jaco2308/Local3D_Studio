@@ -164,18 +164,17 @@ Then open `http://localhost:8000` in your web browser.
 
 ---
 
-## 🛠️ MCP Tools Reference (Complete 16-Tool Suite)
+## 🛠️ MCP Tools Reference (Complete 15-Tool Suite)
 
 | Tool Name | Arguments | Description |
 |:---|:---|:---|
 | `get_hardware_status` | *(none)* | Returns CPU, GPU backend (CUDA/ROCm/MPS), system RAM/VRAM, active Performance Tier (1-4), and Blender binary path. |
 | `set_quality_preset` | `preset` | Sets active quality mode across the platform (`fast_draft`, `auto`, `ultra_production`). |
 | `enhance_prompt_for_3d` | `prompt`, `mode`, `art_style`, `multiview`, `add_pedestal_base`, `humanoid_pose` | Expands raw prompts into photogrammetry-grade 3D prompts across 5 styles and standard pose angles. |
-| `compile_3d_master_prompt` | `subject`, `art_style`, `key_details`, `add_pedestal_base`, `humanoid_pose` | Compiles a 3-Panel Turnaround prompt with wide margins and Anatomical De-Occlusion guarantees. |
-| `generate_concept_image` | `prompt`, `output_filename`, `mode`, `art_style`, `multiview`, `add_pedestal_base`, `seed` | Generates 2D concept illustration using SDXL-Lightning (4-step float16) and arms the Hard Approval Gate. |
+| `compile_3d_master_prompt` | `subject`, `art_style`, `key_details`, `add_pedestal_base`, `humanoid_pose`, `generation_strategy` | Compiles an ultra-detailed Meshy AI Single-Master 3/4 prompt for Antigravity native generation with anti-occlusion & zero-effects directives. |
 | `align_multiview_concept` | `concept_path` | Crops quadrants, isolates main subject via connected components, locks Y-bounding-box, and enhances albedo. |
-| `confirm_concept_and_build_3d` | `concept_path`, `output_filename`, `quality_preset`, `target_height_mm`, `add_pedestal`, `art_style`, `target_triangles`, `voxel_size`, `auto_split` | **Hard Approval Gate**: Invocable ONLY after user confirmation to execute 3D neural reconstruction and Blender pipeline. |
-| `direct_image_to_3d` | `image_path`, `output_filename`, `quality_preset`, `generation_strategy`, `add_pedestal`, `target_height_mm`, `art_style`, `target_triangles`, `voxel_size`, `auto_split` | **Meshy AI Alternative**: Direct 1-step conversion from any 2D photo to 3D mesh (`single_hero_34` or `multiview_turnaround`). |
+| `confirm_concept_and_build_3d` | `concept_path`, `output_filename`, `quality_preset`, `target_height_mm`, `add_pedestal`, `art_style`, `target_triangles`, `voxel_size`, `auto_split` | **Hard Approval Gate**: Invocable after user confirmation to execute 3D neural reconstruction and Blender pipeline. |
+| `direct_image_to_3d` | `image_path`, `output_filename`, `quality_preset`, `generation_strategy`, `add_pedestal`, `target_height_mm`, `art_style`, `target_triangles`, `voxel_size`, `auto_split` | **Primary 3D Entry Point**: Converts approved 2D concept or user image to 3D with rembg, CLAHE, Hunyuan3D-2, and Blender manufacturing. |
 | `retopologize_mesh` | `input_mesh_path`, `output_filename`, `mode`, `target_count` | **AI Retopology**: Converts dense sculpts into clean topology: Quadriflow all-quads (rigging) or fixed tri budget (games). |
 | `bake_pbr_textures` | `input_mesh_path`, `output_filename`, `texture_resolution`, `bake_normal`, `bake_ao` | **PBR Texture Baker**: Computes tangent-space Normal maps and Ambient Occlusion (AO) via Blender Cycles, exporting PBR GLB. |
 | `auto_split_model` | `input_mesh_path`, `output_filename`, `subject_category`, `add_connectors`, `connector_size_mm`, `exploded_distance_mm` | **Auto Split & Keying**: Bisects models into watertight parts with 0.25mm connector pegs/sockets, exploded GLB, and multi-color 3MF. |

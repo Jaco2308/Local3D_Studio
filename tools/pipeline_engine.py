@@ -185,7 +185,11 @@ class PipelineEngine:
                 back_path = align_res["back_path"]
                 clean_path = front_path
             else:
-                BackgroundRemovalEngine.remove_background(image_path, clean_path, replace_with_white=True)
+                print(f"[PipelineEngine] Single hero 3/4 view active. Running clean_and_calibrate_hero_image (rembg + CLAHE + Z=0 ground lock)...")
+                MultiviewAligner.clean_and_calibrate_hero_image(
+                    image_path=image_path,
+                    output_path=clean_path
+                )
 
             # Neural 3D generation
             clean_title = output_name.replace("_", " ")

@@ -30,8 +30,9 @@ def cleanup_memory(obj_to_delete: Optional[Any] = None, label: str = ""):
         except Exception:
             pass
 
-    # Standard Python garbage collector
-    gc.collect()
+    # Multi-pass garbage collection for cyclical references
+    for _ in range(3):
+        gc.collect()
 
     # Hardware-specific cache flushing
     if torch is not None:
@@ -41,6 +42,11 @@ def cleanup_memory(obj_to_delete: Optional[Any] = None, label: str = ""):
         elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             try:
                 torch.mps.empty_cache()
+            except Exception:
+                pass
+            try:
+                if hasattr(torch.mps, "synchronize"):
+                    torch.mps.synchronize()
             except Exception:
                 pass
 

@@ -8,6 +8,7 @@ featuring Dynamic Hardware Tiering (Auto-Scaling) and Quality Mode Presets (Fast
 import os
 import sys
 import json
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -147,48 +148,43 @@ def compile_3d_master_prompt(
     key_details: Optional[list] = None,
     add_pedestal_base: bool = False,
     humanoid_pose: str = "a_pose",
-    generation_strategy: str = "multiview_turnaround"
+    generation_strategy: str = "single_hero_34"
 ) -> str:
     """
-    Compiles a structured master prompt tailored for 3D generation.
-    Supports:
-    - 'multiview_turnaround' (default): 3-Panel synchronized Front, Side, and Rear sheet with de-occlusion rules.
-    - 'single_hero_34': Meshy-style single 3/4 isometric hero angle at 35° elevation for complex occluded subjects.
+    Prompt Compiler for Antigravity Native Image Generator (Meshy AI Single-Master 3/4 Style):
+    Compiles an ultra-detailed, unconstrained 3D master prompt tailored for 3D reconstruction:
+    - 35° elevated isometric three-quarter hero view
+    - Total anti-occlusion & limb separation (open A-pose, clear air under armpits/wings/legs/tail)
+    - Strictly zero aura, zero ki blasts, zero smoke, zero flames, zero pedestal (unless add_pedestal_base=True)
+    - Deep ambient occlusion in crevices and vivid chromatic albedo separation on pure solid white (#ffffff).
     
-    Args:
-        subject: Subject description (e.g. 'Western fantasy dragon', 'Pikachu', 'Cat').
-        art_style: 'faithful_anatomical' (default), 'realistic_sculpt', 'game_prop', etc.
-        key_details: Optional list of key anatomical details to enforce.
-        add_pedestal_base: Whether to add a round display disc (default: False).
-        humanoid_pose: Target pose for humanoids ('a_pose', 't_pose', 'action_pose', 'natural').
-        generation_strategy: 'multiview_turnaround' (default) or 'single_hero_34'.
+    Returns the compiled prompt with the mandatory directive for the agent to generate natively and halt.
     """
     try:
         strat = generation_strategy.lower().strip()
-        if strat == "single_hero_34":
-            from tools.prompt_enhancer import compile_single_hero_prompt as _compile_hero
-            compiled = _compile_hero(
-                subject=subject,
-                art_style=art_style,
-                key_details=key_details or [],
-                add_pedestal_base=add_pedestal_base,
-                humanoid_pose=humanoid_pose
-            )
-        else:
-            from tools.prompt_enhancer import compile_3d_master_prompt as _compile
-            compiled = _compile(
-                subject=subject,
-                art_style=art_style,
-                key_details=key_details or [],
-                add_pedestal_base=add_pedestal_base,
-                humanoid_pose=humanoid_pose
-            )
+        from tools.prompt_enhancer import compile_3d_master_prompt as _compile
+        compiled = _compile(
+            subject=subject,
+            art_style=art_style,
+            key_details=key_details or [],
+            add_pedestal_base=add_pedestal_base,
+            humanoid_pose=humanoid_pose,
+            generation_strategy=strat
+        )
+        clean_name = re.sub(r'[^a-zA-Z0-9_-]', '_', subject.lower().strip())
+        clean_name = re.sub(r'_+', '_', clean_name).strip('_') or "concept"
         return json.dumps({
             "subject": subject,
             "art_style": art_style,
             "humanoid_pose": humanoid_pose,
             "generation_strategy": strat,
-            "compiled_master_prompt": compiled
+            "compiled_prompt": compiled,
+            "compiled_master_prompt": compiled,
+            "recommended_output_path": f"output/{clean_name}_concept.png",
+            "instruction": (
+                "ISTRUZIONE OBBLIGATORIA PER L'AGENTE: Usa ora il tuo tool nativo di generazione immagini con 'compiled_prompt', "
+                f"salva l'immagine in output/{clean_name}_concept.png, mostrala all'utente e FERMATI ad attendere il suo OK prima di chiamare direct_image_to_3d!"
+            )
         }, indent=2)
     except Exception as e:
         return json.dumps({"status": "error", "error": str(e)}, indent=2)
@@ -245,76 +241,6 @@ def align_multiview_concept(
     except Exception as e:
         return json.dumps({"status": "error", "error": str(e)}, indent=2)
 
-
-@server.tool()
-def generate_concept_image(
-    prompt: str,
-    output_filename: str = "concept_latest",
-    mode: str = "3d_print",
-    art_style: str = "faithful_anatomical",
-    multiview: bool = True,
-    add_pedestal_base: bool = False,
-    seed: Optional[int] = None,
-    generation_strategy: str = "auto"
-) -> str:
-    """
-    Generates a 2D concept illustration optimized for 3D photogrammetry using SDXL-Lightning (4-step, float16).
-    Enforces a HARD APPROVAL GATE: saves state as approved=False and obligates the agent to halt and show
-    the concept to the user before calling any 3D tool.
-    
-    Args:
-        prompt: Character or object prompt.
-        output_filename: Output base filename (saved into output/ directory).
-        mode: '3d_print' or 'game_asset'.
-        art_style: 'faithful_anatomical' (default), 'realistic_sculpt', 'game_prop', 'tabletop_miniature', or 'stylized_vinyl'.
-        multiview: Generates synchronized Front, Side, Rear model sheet (default: True).
-        add_pedestal_base: Optional pedestal disc (default: False).
-        seed: Random seed (default: dynamically generated random integer).
-        generation_strategy: 'auto', 'multiview_turnaround', or 'single_hero_34'.
-    """
-    try:
-        strat = generation_strategy.lower().strip()
-        if strat == "single_hero_34":
-            multiview = False
-        elif strat == "multiview_turnaround":
-            multiview = True
-
-        from tools.concept_engine import ConceptEngine
-        out_target = str(OUTPUT_DIR / f"{output_filename}.png")
-        concept_path = ConceptEngine.generate_concept(
-            user_prompt=prompt,
-            output_path=out_target,
-            mode=mode,
-            art_style=art_style,
-            multiview=multiview,
-            add_pedestal_base=add_pedestal_base,
-            seed=seed
-        )
-        abs_concept = os.path.abspath(concept_path)
-        gate_state = _load_approval_state()
-        gate_state["concept_path"] = abs_concept
-        gate_state["approved"] = False
-        gate_state["subject"] = output_filename
-        gate_state["generation_strategy"] = strat
-        _save_approval_state(gate_state)
-
-        return json.dumps({
-            "status": "waiting_user_approval",
-            "concept_path": abs_concept,
-            "concept_uri": f"file://{abs_concept}",
-            "filename": Path(abs_concept).name,
-            "art_style": art_style,
-            "generation_strategy": strat,
-            "approved": False,
-            "directive": "STOP OBBLIGATORIO: Mostra l'immagine all'utente e attendi una sua risposta esplicita prima di chiamare qualsiasi tool 3D.",
-            "instructions": (
-                "È SEVERAMENTE VIETATO chiamare alcuno strumento 3D in questo turno. "
-                "Mostra il concept all'utente e attendi la sua conferma esplicita ('OK / confermo / procedi'). "
-                "Solo in un turno successivo, dopo il via libera dell'utente, potrai chiamare 'confirm_concept_and_build_3d'."
-            )
-        }, indent=2)
-    except Exception as e:
-        return json.dumps({"status": "error", "error": str(e)}, indent=2)
 
 
 @server.tool()

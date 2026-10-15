@@ -260,7 +260,7 @@ def enhance_prompt_for_3d(
     return f"{prompt}, {layout_directives}{pose_extra}, {style_directives}, {grounding_str}, {technical_rules}"
 
 
-def compile_3d_master_prompt(
+def compile_turnaround_sheet_prompt(
     subject: str,
     art_style: str = STYLE_FAITHFUL_ANATOMICAL,
     key_details: Optional[list] = None,
@@ -390,8 +390,10 @@ def compile_single_hero_prompt(
     humanoid_pose: str = HUMANOID_POSE_A
 ) -> str:
     """
-    Compiles a Meshy-style single 3/4 hero view prompt with rich chromatic contrast,
-    tailored to the detected subject category.
+    Compiles an ultra-detailed, unconstrained 3D master prompt for native image generators
+    (Meshy AI Single-Master 3/4 style at 35-degree elevation).
+    Enforces total anti-occlusion, strict zero effects/zero smoke/zero aura/zero pedestal,
+    deep ambient occlusion in limb crevices, and crisp 3D geometric surface relief.
     """
     subj = clean_transparency_keywords(subject.strip())
     category = detect_subject_category(subj)
@@ -406,61 +408,115 @@ def compile_single_hero_prompt(
 
     details_str = ""
     if key_details and len(key_details) > 0:
-        details_str = f", key anatomical details: {', '.join(key_details)}"
+        details_str = f", specific anatomical and costume features: {', '.join(key_details)}"
 
-    if category == CATEGORY_QUADRUPED:
-        grounding_str = (
-            "resting firmly on a solid flat circular matte grey display pedestal with bevelled rim flush with ground, strictly no soft cushions, pet beds, or fabric"
-            if add_pedestal_base else
-            "grounded naturally and solidly on the bare floor plane at Z=0, strictly zero pet beds, zero cushions, zero pillows, zero fabric rugs"
-        )
-    else:
-        grounding_str = (
-            "resting firmly on a solid flat circular matte grey display pedestal with bevelled rim flush with ground"
-            if add_pedestal_base else
-            "grounded naturally and solidly on the floor plane at Z=0 without any artificial pedestal disc"
-        )
-
-    pose_desc = f" in {get_humanoid_pose_directives(humanoid_pose)}" if category == CATEGORY_HUMANOID else ""
-
-    hero_spec = (
-        f"A pristine single three-quarter front hero view of {subj}{pose_desc} captured at an elevated 35-degree isometric angle. "
-        f"Full subject centered in frame displaying the front, side profile, and clear volumetric depth extending toward the rear"
+    # 1. Inquadratura: Full-body single subject, elevated 35-degree three-quarter isometric view
+    framing = (
+        f"A masterwork single-subject full-body reference image of {subj}, "
+        f"captured in an elevated 35-degree three-quarter isometric hero angle. "
+        f"The subject is perfectly centered in frame, clearly displaying the front face, side profile contours, "
+        f"and the full volumetric 3D depth extending toward the rear"
     )
 
-    if category == CATEGORY_PROP_WEAPON:
-        chromatic_separation = (
-            "RICH CHROMATIC ALBEDO SEPARATION: distinct color values and metallic contrast between blade/head, guard, grip, "
-            "and pommel accents. Crisp beveled cutting edges and clearly defined geometric volumes"
-        )
-    elif category == CATEGORY_VEHICLE:
-        chromatic_separation = (
-            "RICH CHROMATIC ALBEDO SEPARATION: distinct color contrast between bodywork, glass canopy, wheels/tracks, and chassis. "
-            "Crisp hard-surface planar bevels and clear undercarriage negative space"
-        )
-    elif category == CATEGORY_HUMANOID:
-        chromatic_separation = (
-            "RICH CHROMATIC ALBEDO SEPARATION: distinct color values between skin, clothing layers, armor, and hair. "
-            "Visible negative space between arms and torso and between legs, allowing vision encoders to cleanly differentiate depth layers"
+    # 2. Anti-Occlusione Totale: Separazione chirurgica di tutti gli arti
+    if category == CATEGORY_HUMANOID:
+        pose_dir = get_humanoid_pose_directives(humanoid_pose)
+        anti_occlusion = (
+            f"TOTAL ANTI-OCCLUSION & LIMB SEPARATION: {pose_dir}. "
+            "Both arms are held open and detached from the torso with visible empty space under the armpits. "
+            "Hands and individual fingers are cleanly sculpted, distinct, and fully visible without clumping or distortion. "
+            "Legs are positioned with a stable open stance, completely separated with clear empty air between thighs and calves. "
+            "Boots/feet rest firmly on the ground. Hair, capes, jackets, or sashes must trail cleanly backward, "
+            "never fusing into the torso or obscuring the arms or legs"
         )
     elif category == CATEGORY_QUADRUPED:
-        chromatic_separation = (
-            "RICH CHROMATIC ALBEDO SEPARATION & DORSAL CLARITY: distinct high-contrast color values between fur markings, paws, and underbelly. "
-            "Captured at an elevated 35-degree isometric angle clearly showing the front face, side profile, "
-            "unobstructed dorsal spine, and high-raised tail with completely visible tail root. "
-            "Strictly resting directly on the ground plane, zero cushions, zero pet beds, zero fabric folds"
+        anti_occlusion = (
+            "TOTAL ANTI-OCCLUSION & LIMB SEPARATION: "
+            "All four legs and paws are clearly visible, distinct, and planted firmly on the ground, "
+            "with unambiguous empty negative space separating foreground legs from background legs. "
+            "If the creature has wings, they are lifted high and spread upward/backward, completely detached from torso and hindquarters. "
+            "The tail is arched high and away from the body in an expressive curve, with its root attachment point at the lower spine/pelvis "
+            "100% visible, exposed, and never tucked or obscuring the paws or haunches"
+        )
+    elif category == CATEGORY_PROP_WEAPON:
+        anti_occlusion = (
+            "TOTAL GEOMETRIC SEPARATION & CLARITY: "
+            "Full three-quarter isometric display showing blade/barrel thickness, guard clearance, and pommel/stock. "
+            "Sharp planar bevels and perfectly straight central axis with visible negative space around handles and triggers"
+        )
+    elif category == CATEGORY_VEHICLE:
+        anti_occlusion = (
+            "TOTAL GEOMETRIC SEPARATION & HARD-SURFACE CLARITY: "
+            "Full three-quarter isometric view showing front grille, side profile, and rear canopy. "
+            "All wheels and tracks clearly separated from wheel arches with clean undercarriage negative space"
         )
     else:
-        chromatic_separation = (
-            "RICH CHROMATIC ALBEDO SEPARATION: distinct, high-contrast color values and subtle tone variations between foreground features, "
-            "background parts, and body torso so vision encoders cleanly differentiate depth layers. "
-            "Visible negative space between distinct appendages"
+        anti_occlusion = (
+            "TOTAL ANTI-OCCLUSION: "
+            "Clean silhouette separation, all appendages, handles, or components clearly detached from main body "
+            "with visible air clearance and distinct volumetric depth from front to rear"
         )
 
-    technical_rules = (
-        "pure solid uniform clean white background (#ffffff), omnidirectional shadowless studio softbox lighting, "
-        "neutral albedo, razor-sharp silhouette separation, tangible physical 3D relief on all details "
-        "for single-color monochrome 3D printing, watertight solid geometry, zero cast shadows"
+    # 3. Zero Effetti / Zero Fumo / Zero Basetta
+    if add_pedestal_base:
+        grounding = (
+            "Resting solidly on a flat, low-profile circular matte grey display pedestal with bevelled edge flush with ground at Z=0. "
+            "Strictly zero smoke clouds, zero dust, zero energy aura, zero fire or flames, zero magic sparkles, zero particle effects, zero motion blur, zero scenic background elements. "
+            "Only the solid physical body of the subject on the pedestal"
+        )
+    else:
+        grounding = (
+            "Grounded solidly and naturally directly on the flat horizontal floor plane at Z=0. "
+            "STRICTLY ZERO PEDESTAL, zero display stand, zero circular base disc, zero ground plaque, zero floor tiles, zero floating rocks. "
+            "STRICTLY ZERO SPECIAL EFFECTS: zero energy aura, zero ki blasts, zero lightning bolts, zero smoke clouds, zero flames, zero dust trails, zero particle bursts, zero motion blur, zero scenic backgrounds. "
+            "ONLY the solid physical body of the subject standing on flat ground"
+        )
+
+    # 4. Colori e Rilievo 3D (Ambient Occlusion profonda e separazione cromatica)
+    chromatic_relief = (
+        "3D CHROMATIC SEPARATION & AMBIENT OCCLUSION: "
+        "Vivid, clean color differentiation across anatomical parts, skin tones, muscles, and clothing/armor layers. "
+        "Pronounced, deep ambient occlusion crevice shading in the grooves between overlapping limbs and body volumes "
+        "to provide unmistakable depth cues to neural 3D reconstruction networks. "
+        "Eyes, facial features, hair strands, and muscle topology are crisply sculpted with tangible physical geometric surface relief"
     )
 
-    return f"{hero_spec}. {chromatic_separation}. {style_dir}{details_str}. {grounding_str}. {technical_rules}."
+    # 5. Regole Tecniche di Studio
+    technical = (
+        "Pure uniform solid clean white background (#ffffff), flat omnidirectional shadowless studio softbox lighting, "
+        "neutral albedo exposure, razor-sharp silhouette isolation for photogrammetry, zero shadows cast on the ground, "
+        "solid watertight physical geometry suitable for 3D modeling and 3D printing"
+    )
+
+    return f"{framing}. {anti_occlusion}. {grounding}. {chromatic_relief}. {style_dir}{details_str}. {technical}."
+
+
+def compile_3d_master_prompt(
+    subject: str,
+    art_style: str = STYLE_FAITHFUL_ANATOMICAL,
+    key_details: Optional[list] = None,
+    add_pedestal_base: bool = False,
+    humanoid_pose: str = HUMANOID_POSE_A,
+    generation_strategy: str = "single_hero_34"
+) -> str:
+    """
+    Compiles an optimized 3D master prompt for native image generators.
+    Defaults to 'single_hero_34' (Meshy AI Single-Master 3/4 hero view at 35° elevation),
+    with optional support for 'multiview_turnaround' (3-panel sheet).
+    """
+    strat = generation_strategy.lower().strip()
+    if strat == "multiview_turnaround":
+        return compile_turnaround_sheet_prompt(
+            subject=subject,
+            art_style=art_style,
+            key_details=key_details,
+            add_pedestal_base=add_pedestal_base,
+            humanoid_pose=humanoid_pose
+        )
+    return compile_single_hero_prompt(
+        subject=subject,
+        art_style=art_style,
+        key_details=key_details,
+        add_pedestal_base=add_pedestal_base,
+        humanoid_pose=humanoid_pose
+    )
