@@ -29,25 +29,41 @@ class ConceptEngine:
 
     @classmethod
     def get_pipeline(cls):
-        """Loads SDXL-Lightning 4-step pipeline configured for local hardware."""
+        """Loads SDXL-Lightning 4-step pipeline with memory-mapped zero-duplication loading."""
         if cls._pipeline is not None:
             return cls._pipeline
 
         if not _DIFFUSERS_AVAILABLE:
             raise RuntimeError("diffusers and transformers must be installed for local concept generation.")
 
+        import gc
         hw = HardwareManager.get_instance()
         device = hw.get_torch_device()
         dtype = hw.get_torch_dtype()
 
         print(f"[ConceptEngine] Loading SDXL-Lightning 4-step on {hw.device_info['name']} ({dtype})...")
 
+        local_cached_unet = Path("models/sdxl_lightning_4step_unet")
+
         try:
-            # Load UNet configuration from base SDXL and load weights from ByteDance/SDXL-Lightning
-            ckpt_path = hf_hub_download(SDXL_LIGHTNING_REPO, SDXL_LIGHTNING_CKPT)
-            unet_config = UNet2DConditionModel.load_config(SDXL_MODEL_ID, subfolder="unet")
-            unet = UNet2DConditionModel.from_config(unet_config).to(dtype=dtype)
-            unet.load_state_dict(load_file(ckpt_path))
+            if not (local_cached_unet / "config.json").exists() or not (local_cached_unet / "diffusion_pytorch_model.safetensors").exists():
+                local_cached_unet.mkdir(parents=True, exist_ok=True)
+                ckpt_path = hf_hub_download(SDXL_LIGHTNING_REPO, SDXL_LIGHTNING_CKPT)
+                unet_config = UNet2DConditionModel.load_config(SDXL_MODEL_ID, subfolder="unet")
+                unet = UNet2DConditionModel.from_config(unet_config).to(dtype=dtype)
+                state_dict = load_file(ckpt_path)
+                unet.load_state_dict(state_dict)
+                del state_dict
+                gc.collect()
+                unet.save_pretrained(local_cached_unet)
+                del unet
+                gc.collect()
+
+            # Single-pass direct memory-mapped safetensors loading (zero memory duplication)
+            unet = UNet2DConditionModel.from_pretrained(
+                str(local_cached_unet),
+                torch_dtype=dtype
+            )
 
             pipe = StableDiffusionXLPipeline.from_pretrained(
                 SDXL_MODEL_ID,
@@ -55,8 +71,11 @@ class ConceptEngine:
                 torch_dtype=dtype,
                 variant="fp16" if dtype == torch.float16 else None
             )
+            del unet
+            gc.collect()
+
         except Exception as e:
-            print(f"[ConceptEngine] Note: Direct local UNet load encountered ({e}), falling back to standard SDXL pipeline...")
+            print(f"[ConceptEngine] Note: Direct UNet load fallback ({e}), falling back to standard SDXL pipeline...")
             pipe = StableDiffusionXLPipeline.from_pretrained(
                 SDXL_MODEL_ID,
                 torch_dtype=dtype,
@@ -65,6 +84,7 @@ class ConceptEngine:
 
         # Set 4-step scheduler
         pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config, timestep_spacing="trailing")
+        pipe.enable_attention_slicing()
         pipe.to(device)
 
         cls._pipeline = pipe
@@ -85,8 +105,7 @@ class ConceptEngine:
     ) -> str:
         """
         Generates a 2D concept PNG from a user prompt using the 3D-Aware Prompt Enhancer.
-        Supports dynamic random seeds and style routing.
-        In 16GB_SAFE mode, completely deallocates pipeline memory after generation.
+        Runs in strict inference_mode with attention slicing and immediate deallocation under 16GB_SAFE.
         """
         import random
         if seed is None:
@@ -119,23 +138,21 @@ class ConceptEngine:
         if seed is not None and torch is not None:
             generator = torch.Generator(device="cpu").manual_seed(seed)
 
-        print(f"[ConceptEngine] Running 4-step SDXL-Lightning inference (seed={seed})...")
-        image = pipe(
-            prompt=enhanced_prompt,
-            num_inference_steps=4,
-            guidance_scale=0.0,  # SDXL-Lightning operates with guidance_scale=0 for 4-step
-            width=width,
-            height=height,
-            generator=generator
-        ).images[0]
+        print(f"[ConceptEngine] Running 4-step SDXL-Lightning inference in torch.inference_mode (seed={seed})...")
+        with torch.inference_mode():
+            image = pipe(
+                prompt=enhanced_prompt,
+                num_inference_steps=4,
+                guidance_scale=0.0,
+                width=width,
+                height=height,
+                generator=generator
+            ).images[0]
 
         image.save(output_path, "PNG")
         print(f"[ConceptEngine] Concept saved to: {output_path}")
 
-        # Memory Management
-        if hw.is_16gb_safe():
-            cls._pipeline = offload_or_cleanup(cls._pipeline, label="SDXL-Lightning")
-        else:
-            cls._pipeline = offload_or_cleanup(cls._pipeline, label="SDXL-Lightning")
+        # Immediate clean deallocation under 16GB_SAFE
+        cls._pipeline = offload_or_cleanup(cls._pipeline, label="SDXL-Lightning")
 
         return output_path
