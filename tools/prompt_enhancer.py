@@ -123,14 +123,17 @@ def detect_subject_category(text: str) -> str:
         "paladino"
     ]
 
+    # Exclude "dragon ball" from triggering quadruped dragon classification
+    lower_cleaned = re.sub(r"\bdragon\s*ball\b", "", lower)
+
     has_weapon = any(k in lower for k in weapon_keywords)
     has_vehicle = any(k in lower for k in vehicle_keywords)
-    has_quad = any(k in lower for k in quadruped_keywords)
+    has_quad = any(k in lower_cleaned for k in quadruped_keywords)
     has_fauna = any(k in lower for k in fauna_keywords)
     has_humanoid = any(k in lower for k in humanoid_keywords)
 
     # First words intent check
-    first_two_words = " ".join(lower.split()[:2]) if lower.split() else ""
+    first_two_words = " ".join(lower_cleaned.split()[:2]) if lower_cleaned.split() else ""
     if any(k in first_two_words for k in ["sword", "blade", "axe", "shield", "bow", "hammer", "spada", "lama", "ascia", "scudo", "pugnale", "dagger"]):
         return CATEGORY_PROP_WEAPON
     if any(k in first_two_words for k in quadruped_keywords):
@@ -252,7 +255,7 @@ def enhance_prompt_for_3d(
         "flat ground, zero cushions"
     )
 
-    technical_rules = "solid pure white background (#ffffff), studio lighting, watertight 3D relief"
+    technical_rules = "pure white background (#ffffff), studio lighting, 3D relief"
 
     return f"{prompt}, {layout_directives}{pose_extra}, {style_directives}, {grounding_str}, {technical_rules}"
 
