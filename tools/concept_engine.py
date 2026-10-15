@@ -1,0 +1,135 @@
+"""
+Local3D Studio 2D Concept Engine (16GB-Safe)
+Generates high-resolution 2D concepts using SDXL-Lightning (4-step, float16)
+with immediate deallocation under the 16GB_SAFE memory profile.
+"""
+
+import os
+from pathlib import Path
+from typing import Optional
+from PIL import Image
+
+from core.hardware_backend import HardwareManager
+from core.memory import cleanup_memory, offload_or_cleanup
+from core.config import SDXL_MODEL_ID, SDXL_LIGHTNING_REPO, SDXL_LIGHTNING_CKPT, OUTPUT_DIR
+from tools.prompt_enhancer import enhance_prompt_for_3d
+
+try:
+    import torch
+    from diffusers import StableDiffusionXLPipeline, UNet2DConditionModel, EulerDiscreteScheduler
+    from huggingface_hub import hf_hub_download
+    from safetensors.torch import load_file
+    _DIFFUSERS_AVAILABLE = True
+except ImportError:
+    _DIFFUSERS_AVAILABLE = False
+
+
+class ConceptEngine:
+    _pipeline = None
+
+    @classmethod
+    def get_pipeline(cls):
+        """Loads SDXL-Lightning 4-step pipeline configured for local hardware."""
+        if cls._pipeline is not None:
+            return cls._pipeline
+
+        if not _DIFFUSERS_AVAILABLE:
+            raise RuntimeError("diffusers and transformers must be installed for local concept generation.")
+
+        hw = HardwareManager.get_instance()
+        device = hw.get_torch_device()
+        dtype = hw.get_torch_dtype()
+
+        print(f"[ConceptEngine] Loading SDXL-Lightning 4-step on {hw.device_info['name']} ({dtype})...")
+
+        try:
+            # Check for direct UNet checkpoint from ByteDance/SDXL-Lightning
+            unet = UNet2DConditionModel.from_pretrained(
+                SDXL_LIGHTNING_REPO,
+                subfolder="",
+                weight_name=SDXL_LIGHTNING_CKPT,
+                torch_dtype=dtype
+            )
+            pipe = StableDiffusionXLPipeline.from_pretrained(
+                SDXL_MODEL_ID,
+                unet=unet,
+                torch_dtype=dtype,
+                variant="fp16" if dtype == torch.float16 else None
+            )
+        except Exception as e:
+            print(f"[ConceptEngine] Note: Direct local UNet load encountered ({e}), falling back to standard SDXL pipeline...")
+            pipe = StableDiffusionXLPipeline.from_pretrained(
+                SDXL_MODEL_ID,
+                torch_dtype=dtype,
+                variant="fp16" if dtype == torch.float16 else None
+            )
+
+        # Set 4-step scheduler
+        pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config, timestep_spacing="trailing")
+        pipe.to(device)
+
+        cls._pipeline = pipe
+        return cls._pipeline
+
+    @classmethod
+    def generate_concept(
+        cls,
+        user_prompt: str,
+        output_path: Optional[str] = None,
+        mode: str = "3d_print",
+        art_style: str = "faithful_anatomical",
+        multiview: bool = True,
+        add_pedestal_base: bool = False,
+        width: int = 1024,
+        height: int = 1024,
+        seed: Optional[int] = None
+    ) -> str:
+        """
+        Generates a 2D concept PNG from a user prompt using the 3D-Aware Prompt Enhancer.
+        Supports dynamic random seeds and style routing.
+        In 16GB_SAFE mode, completely deallocates pipeline memory after generation.
+        """
+        import random
+        if seed is None:
+            seed = random.randint(1, 99999999)
+
+        enhanced_prompt = enhance_prompt_for_3d(
+            user_prompt=user_prompt,
+            mode=mode,
+            art_style=art_style,
+            multiview=multiview,
+            add_pedestal_base=add_pedestal_base
+        )
+        print(f"[ConceptEngine] Enhanced Prompt ({art_style}, seed={seed}): {enhanced_prompt}")
+
+        if output_path is None:
+            output_path = str(OUTPUT_DIR / "concept_latest.png")
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+
+        hw = HardwareManager.get_instance()
+        pipe = cls.get_pipeline()
+
+        generator = None
+        if seed is not None and torch is not None:
+            generator = torch.Generator(device="cpu").manual_seed(seed)
+
+        print(f"[ConceptEngine] Running 4-step SDXL-Lightning inference (seed={seed})...")
+        image = pipe(
+            prompt=enhanced_prompt,
+            num_inference_steps=4,
+            guidance_scale=0.0,  # SDXL-Lightning operates with guidance_scale=0 for 4-step
+            width=width,
+            height=height,
+            generator=generator
+        ).images[0]
+
+        image.save(output_path, "PNG")
+        print(f"[ConceptEngine] Concept saved to: {output_path}")
+
+        # Memory Management
+        if hw.is_16gb_safe():
+            cls._pipeline = offload_or_cleanup(cls._pipeline, label="SDXL-Lightning")
+        else:
+            cls._pipeline = offload_or_cleanup(cls._pipeline, label="SDXL-Lightning")
+
+        return output_path

@@ -1,0 +1,37 @@
+# ==============================================================================
+# Local3D Studio Universal Dependencies (16GB-Safe Cross-Platform)
+# Compatible 100% with macOS Apple Silicon, AMD ROCm/DirectML, and NVIDIA CUDA.
+# Pure Python/PyTorch — Zero proprietary C++ compilation dependencies.
+# ==============================================================================
+
+# Core MCP & Fast API Server
+mcp>=2.0.0
+fastapi>=0.115.0
+uvicorn>=0.30.0
+websockets>=12.0.0
+pydantic>=2.8.0
+python-multipart>=0.0.12
+requests>=2.31.0
+psutil>=6.0.0
+
+# AI Models & Diffusion (Pure PyTorch)
+diffusers>=0.30.0
+transformers>=4.44.0
+accelerate>=0.33.0
+safetensors>=0.4.4
+huggingface-hub>=0.24.0
+
+# Clean Background Removal (Pure Python / ONNX)
+rembg>=2.0.50
+onnxruntime>=1.18.0
+
+# 3D Mesh Processing, LookDev & Computer Vision
+trimesh>=4.4.0
+Pillow>=10.4.0
+numpy>=1.26.0
+scipy>=1.13.0
+opencv-python-headless>=4.10.0
+
+# Resilient Hugging Face ZeroGPU / Space Fallback
+gradio_client>=1.3.0
+
