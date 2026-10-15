@@ -46,7 +46,7 @@ Local3D Studio is dedicated to providing a 100% local, high-fidelity AI-to-3D ge
 
 Before submitting a Pull Request, verify:
 1. **MCP Tool Suite Validation**:
-   Ensure all 16 MCP tools register and respond without runtime exceptions.
+   Ensure all 15 MCP tools register and respond without runtime exceptions.
 2. **Mesh Manifoldness**:
    If modifying `blender_pipeline.py` or `model_splitter.py`, run a test cut with `trimesh` to confirm `mesh.is_watertight == True`.
 3. **Clean Diffs**:

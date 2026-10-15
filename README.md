@@ -18,7 +18,7 @@ Designed as a **100% local-first, zero-cloud alternative to platforms like Meshy
 
 ## 🌟 Key Feature Highlights
 
-### 1. Complete Meshy AI Open-Source Alternative (16 Native MCP Tools)
+### 1. Complete Meshy AI Open-Source Alternative (15 Native MCP Tools)
 Local3D Studio provides a full local replacement for commercial 3D generation suites:
 - **Direct Image-to-3D (`direct_image_to_3d`)**: 1-click transformation of any 2D concept or photo into a 3D mesh using `single_hero_34` (isometric props/weapons) or `multiview_turnaround` (full 360° characters).
 - **Auto Split & Assembly Keying (`auto_split_model`)**: Automatically cuts models into keyed parts (Head, Torso, Arms, Legs) with 0.25mm assembly tolerances, manifold watertight capping, exploded `.glb` view, and native multi-color `.3mf` for Bambu Studio & OrcaSlicer AMS.
@@ -49,8 +49,11 @@ Eliminates rear-side hallucinations and occlusion:
 - **Y-Bounding-Box Lock**: Standardizes character height to 400px on a 512x512 canvas, locking the feet to $Z=0$ ($Y=456$) and crown to $Y=56$.
 - **CLAHE Normal Enhancement**: Enhances fine surface relief in albedo textures before 3D reconstruction.
 
-### 5. Hard Approval Gate & Clean Output Isolation
-- **Approval Gate**: Protects compute resources by pausing execution after 2D concept generation until the user explicitly confirms the design.
+### 5. Production 3-Step Protocol & Hard Approval Gate
+- **Prompt Compiler (`compile_3d_master_prompt`)**: Generates an ultra-detailed, photogrammetry-grade prompt in the **Meshy AI Single-Master 3/4** profile with strict anti-occlusion directives (A-pose, separated limbs, zero smoke, zero auras, zero pedestals).
+- **Native 2D Generation / User Image**: Decouples 2D generation to the client assistant (e.g. Antigravity's native multimodal generator) or a user-provided photo. Eliminates local 2D diffusion memory consumption, completely avoiding system freezes on 16GB unified RAM.
+- **Hard Approval Gate**: Execution strictly pauses after saving `output/<name>_concept.png`. The agent must display the concept and wait for explicit user confirmation before proceeding.
+- **Direct 3D Reconstruction (`direct_image_to_3d`)**: Preprocesses the approved image with background removal (`rembg_engine.py`), CLAHE local contrast, and $Z=0$ ground lock, followed by isolated neural 3D reconstruction and headless Blender manufacturing.
 - **Tempfile Hygiene**: Intermediate texture slices, masks, and raw neural meshes are kept inside `tempfile.TemporaryDirectory()`. Only the final `.stl`, `.glb`, `.3mf`, and `lookdev_sheet.png` are written to `output/`.
 
 ---
@@ -69,7 +72,7 @@ Local3D-Studio/
 ├── setup_env.py                     # Universal installer & hardware bootstrapper
 ├── run_mcp.sh / .bat                # In-process stdio MCP server launchers
 ├── start_worker.sh / .bat           # Optional Web Studio GUI launchers
-├── server.py                        # Root MCP Server (16 Native Tools)
+├── server.py                        # Root MCP Server (15 Native Tools)
 ├── worker_api.py                    # Optional FastAPI Web Studio & Three.js server
 │
 ├── core/                            # Hardware abstraction & memory tiering layer
@@ -81,9 +84,9 @@ Local3D-Studio/
 │
 ├── tools/                           # Modular Generative & Manufacturing Engines
 │   ├── __init__.py
-│   ├── prompt_enhancer.py           # Dynamic style router (5 art profiles + poses)
+│   ├── prompt_enhancer.py           # Dynamic style router & Meshy AI prompt compiler
 │   ├── pose_canonicalizer.py        # Humanoid Pose Guidance (A-Pose/T-Pose overlay)
-│   ├── concept_engine.py            # SDXL-Lightning 4-step 2D concept generator
+│   ├── concept_engine.py            # Concept engine & fallback generator
 │   ├── rembg_engine.py              # Pure Python background removal (u2net/ONNX)
 │   ├── multiview_aligner.py         # Anti-bleed & Y-bounding-box lock calibration
 │   ├── neural_3d_engine.py          # Hunyuan3D-2 shape generation (Mini & Full)

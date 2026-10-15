@@ -14,7 +14,7 @@ flowchart TD
     end
 
     subgraph MCP ["Local3D Studio Universal MCP Server (server.py)"]
-        Router["16 Native MCP Tools"]
+        Router["15 Native MCP Tools"]
         Gate["Hard Approval Gate (.state_gate.json)"]
     end
 
@@ -124,3 +124,24 @@ Prevents limb-to-body fusion (*mesh webbing*) by standardizing character inputs 
   - Tangent-space Normal map baking in Blender Cycles.
   - Ambient Occlusion (AO) map baking at 2048px/4096px.
   - Native PBR material graph binding and GLB export.
+ 
+---
+ 
+## 6. Production 3-Step Architecture & 16GB Zero-Freeze Strategy
+ 
+To guarantee zero system freezes and prevent heavy memory swap on 16GB unified RAM machines (such as Apple Silicon MacBooks), Local3D Studio decouples the generation lifecycle into three deterministic steps:
+ 
+1. **Prompt Compilation (`compile_3d_master_prompt`)**:
+   - Synthesizes user descriptions into an ultra-detailed, photogrammetry-grade prompt formatted in the **Meshy AI Single-Master 3/4** profile.
+   - Enforces strict anti-occlusion directives (A-pose, separated limbs, elevated 35° isometric angle) and categorically bans non-physical artifacts (energy auras, ki blasts, smoke, clouds, circular base pedestals).
+ 
+2. **Concept 2D Generation & Hard Approval Gate**:
+   - High-resolution 2D concepts are generated directly via the client AI assistant (e.g. Antigravity's native multimodal generator) or provided by the user.
+   - This eliminates the heavy RAM footprint of loading local 2D diffusion pipelines (`SDXL-Lightning`) into unified memory, preserving the full 16GB RAM budget for 3D reconstruction.
+   - The generated concept is saved to `output/<name>_concept.png` and presented to the user. Execution strictly pauses until explicit user approval is granted.
+ 
+3. **Neural 3D Reconstruction & Manufacturing (`direct_image_to_3d`)**:
+   - Once approved, the image is automatically preprocessed via `rembg_engine.py` (with connected-component filtering to strip loose artifacts), CLAHE local contrast enhancement, and bounding-box grounding to $Z=0$ ($Y=456$).
+   - Neural 3D reconstruction runs in an isolated environment (`PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0` with aggressive memory purges before and after inference).
+   - Headless Blender (`bpy`) processes the raw mesh with `separate(type='LOOSE')` to isolate the primary shell, performs non-destructive polygon decimation, and exports production deliverables (`.stl`, `.glb`, `.3mf`, and `lookdev_sheet.png`).
+

@@ -18,7 +18,7 @@ Progettato come **alternativa 100% locale, aperta e senza abbonamenti a piattafo
 
 ## 🌟 Funzionalità Principali
 
-### 1. Suite Completa Open-Source Alternativa a Meshy AI (16 Tool MCP Nativi)
+### 1. Suite Completa Open-Source Alternativa a Meshy AI (15 Tool MCP Nativi)
 Local3D Studio fornisce una sostituzione locale e gratuita delle funzionalità delle piattaforme cloud commerciali:
 - **Direct Image-to-3D (`direct_image_to_3d`)**: Conversione in 1 click di qualsiasi immagine o foto 2D in mesh solida 3D, con strategie `single_hero_34` (armi, veicoli, prop isometrici) o `multiview_turnaround` (personaggi e creature a 360°).
 - **Auto Split & Assembly Keying (`auto_split_model`)**: Suddivide automaticamente mesh complesse in parti anatomiche (Testa, Torso, Braccia, Gambe) con tolleranza di incastro di 0.25mm, chiusura stagna dei tagli, vista esplosa `.glb` e pacchetto multi-colore `.3mf` pronto per Bambu Studio e OrcaSlicer AMS.
@@ -49,8 +49,11 @@ Elimina le allucinazioni sul retro e le occlusioni tipiche dei modelli a vista s
 - **Y-Bounding-Box Lock**: Normalizza l'altezza della figura a 400px su canvas 512x512 trasparente, ancorando i piedi a $Z=0$ ($Y=456$) e la sommità della testa a $Y=56$.
 - **CLAHE Normal Enhancement**: Esalta i micro-rilievi della superficie nell'albedo prima della ricostruzione neurale.
 
-### 5. Hard Approval Gate e Igiene dei File Temporanei
-- **Approval Gate**: Salva risorse di calcolo bloccando l'esecuzione dopo la generazione del concept 2D, attendendo la conferma esplicita dell'utente prima della generazione 3D.
+### 5. Protocollo di Produzione a 3 Fasi & Hard Approval Gate
+- **Compilatore Prompt (`compile_3d_master_prompt`)**: Genera prompt ultra-dettagliati in stile **Meshy AI Single-Master 3/4** con direttive ferree di anti-occlusione (A-pose, arti staccati, zero fumo, zero auree, zero basette).
+- **Generazione 2D Nativa / Immagine Utente**: Delega la generazione del concept 2D all'assistente AI (es. generatore nativo multimodale Antigravity) o a una foto fornita dall'utente. Elimina il consumo locale di RAM dei modelli di diffusione 2D, azzerando i freeze del sistema su macchine con 16GB di memoria unificata.
+- **Hard Approval Gate**: L'esecuzione si arresta tassativamente dopo il salvataggio in `output/<nome>_concept.png`. L'agente mostra l'immagine all'utente e attende esplicita conferma prima di procedere.
+- **Ricostruzione 3D Diretta (`direct_image_to_3d`)**: Pre-elabora l'immagine approvata con rimozione sfondo (`rembg_engine.py`), contrasto locale CLAHE e ancoraggio a $Z=0$, seguiti da ricostruzione neurale isolata e manifattura headless Blender.
 - **Igiene File Temporanei**: Tutti i ritagli intermedi e le mesh grezze risiedono in `tempfile.TemporaryDirectory()`. Solo gli asset finali (`.stl`, `.glb`, `.3mf`, `lookdev_sheet.png`) vengono salvati in `output/`.
 
 ---
@@ -69,7 +72,7 @@ Local3D-Studio/
 ├── setup_env.py                     # Installer universale e bootstrapper hardware
 ├── run_mcp.sh / .bat                # Launcher server MCP stdio in-process
 ├── start_worker.sh / .bat           # Launcher opzionale Web Studio GUI
-├── server.py                        # Server MCP Principale (16 Tool Nativi)
+├── server.py                        # Server MCP Principale (15 Tool Nativi)
 ├── worker_api.py                    # Server opzionale FastAPI Web Studio & Three.js
 │
 ├── core/                            # Livello di astrazione hardware e memoria
@@ -81,9 +84,9 @@ Local3D-Studio/
 │
 ├── tools/                           # Motori Generativi e di Manifattura Modulari
 │   ├── __init__.py
-│   ├── prompt_enhancer.py           # Router dinamico di stili e pose (5 profili)
+│   ├── prompt_enhancer.py           # Router dinamico di stili e compilatore prompt Meshy AI
 │   ├── pose_canonicalizer.py        # Guida Pose Umanoidi (overlay A-Pose/T-Pose)
-│   ├── concept_engine.py            # Generatore concept 2D SDXL-Lightning (4-step)
+│   ├── concept_engine.py            # Motore concept e generatore di fallback
 │   ├── rembg_engine.py              # Rimozione sfondo in puro Python (u2net/ONNX)
 │   ├── multiview_aligner.py         # Calibrazione anti-bleed e lock Y a Z=0
 │   ├── neural_3d_engine.py          # Ricostruzione 3D Hunyuan3D-2 (Mini & Full)
