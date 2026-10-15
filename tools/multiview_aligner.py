@@ -104,10 +104,13 @@ class MultiviewAligner:
         Removes background, strips adjacent bleed via connected component analysis,
         and returns a tight bounding box crop with alpha channel.
         """
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f_in, \
-             tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f_out:
-            in_path = f_in.name
-            out_path = f_out.name
+        f_in = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        in_path = f_in.name
+        f_in.close()
+
+        f_out = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        out_path = f_out.name
+        f_out.close()
 
         try:
             slice_img.save(in_path, "PNG")
@@ -417,8 +420,9 @@ class MultiviewAligner:
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Source hero image not found: {image_path}")
 
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f_tmp:
-            tmp_rgba_path = f_tmp.name
+        f_tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        tmp_rgba_path = f_tmp.name
+        f_tmp.close()
 
         try:
             # 1. Background removal to RGBA

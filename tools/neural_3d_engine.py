@@ -140,8 +140,11 @@ class Neural3DEngine:
                 output_glb_path = str(OUTPUT_DIR / f"{Path(image_path).stem}_raw.glb")
             os.makedirs(os.path.dirname(os.path.abspath(output_glb_path)), exist_ok=True)
 
-            # Step 1: Pre-process image into temporary file
-            BackgroundRemovalEngine.remove_background(image_path, clean_img_path, replace_with_white=True)
+            # Step 1: Pre-process image into temporary file if not already pre-cleaned
+            if "clean_isolated" in Path(image_path).name or front_view_path is not None:
+                clean_img_path = image_path
+            else:
+                BackgroundRemovalEngine.remove_background(image_path, clean_img_path, replace_with_white=True)
 
             # Step 2: Determine Strategy & Multiview Views
             strat = generation_strategy.lower().strip()
@@ -218,7 +221,7 @@ class Neural3DEngine:
                             guidance_scale=5.5,
                             seed=seed,
                             octree_resolution=target_octree,
-                            check_box_rembg=False if mv_front else True,
+                            check_box_rembg=False,
                             num_chunks=8000,
                             randomize_seed=True,
                             api_name="/shape_generation"

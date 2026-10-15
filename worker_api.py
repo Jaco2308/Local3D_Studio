@@ -867,28 +867,11 @@ def api_enhance_prompt(req: PromptRequest):
 
 @app.post("/api/v1/generate-concept")
 def api_generate_concept(req: ConceptRequest):
-    try:
-        out_path = str(OUTPUT_DIR / f"{req.output_name}.png")
-        style = req.art_style or state_mgr.art_style
-        result_path = ConceptEngine.generate_concept(
-            user_prompt=req.prompt,
-            output_path=out_path,
-            mode=req.mode,
-            art_style=style,
-            multiview=req.multiview,
-            add_pedestal_base=req.add_pedestal_base,
-            seed=req.seed
-        )
-        state_mgr.current_image_path = result_path
-        filename = Path(result_path).name
-        return {
-            "status": "success",
-            "concept_path": result_path,
-            "filename": filename,
-            "download_url": f"/api/v1/files/{filename}"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "status": "info",
+        "message": "Local 2D concept generation with SDXL-Lightning has been deactivated to eliminate memory bottlenecks and freezes. Please generate your 2D concept using Antigravity native generator or upload your image directly at /api/v1/upload-image.",
+        "recommended_flow": "Use compile_3d_master_prompt -> Native 2D concept -> direct_image_to_3d"
+    }
 
 
 @app.post("/api/v1/upload-image")

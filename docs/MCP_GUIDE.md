@@ -147,26 +147,25 @@ In `~/.codeium/windsurf/mcp_config.json`:
 
 ---
 
-## 🛠️ Complete MCP Tool Suite (16 Native Tools)
+## 🛠️ Complete MCP Tool Suite (15 Native Tools)
 
 | # | Tool Name | Arguments | Purpose & Highlights |
 |---|:---|:---|:---|
 | 1 | `get_hardware_status` | *(none)* | Returns CPU, GPU backend (CUDA/ROCm/MPS), system RAM/VRAM, active Performance Tier (1 to 4), and Blender binary location. |
 | 2 | `set_quality_preset` | `preset` (`'fast_draft'`, `'auto'`, `'ultra_production'`) | Configures mesh density and neural reconstruction steps across the platform. |
 | 3 | `enhance_prompt_for_3d` | `prompt`, `mode`, `art_style`, `multiview`, `add_pedestal_base`, `humanoid_pose` | Expands raw prompts into photogrammetry-grade 3D prompts across 5 styles and standard pose angles. |
-| 4 | `compile_3d_master_prompt` | `subject`, `art_style`, `key_details`, `add_pedestal_base`, `humanoid_pose` | Compiles a 3-Panel Turnaround prompt with wide margins and Anatomical De-Occlusion guarantees. |
-| 5 | `generate_concept_image` | `prompt`, `output_filename`, `mode`, `art_style`, `multiview`, `add_pedestal_base`, `seed` | Generates 2D concept illustration using SDXL-Lightning (4-step float16) and arms the Hard Approval Gate. |
-| 6 | `align_multiview_concept` | `concept_path` | Crops quadrants, isolates main subject via connected components, locks Y-bounding-box, and enhances albedo. |
-| 7 | `confirm_concept_and_build_3d` | `concept_path`, `output_filename`, `quality_preset`, `target_height_mm`, `add_pedestal`, `art_style`, `target_triangles`, `voxel_size`, `auto_split` | **Hard Approval Gate**: Invocable ONLY after user confirmation to execute 3D neural reconstruction and Blender pipeline. |
-| 8 | `direct_image_to_3d` | `image_path`, `output_filename`, `quality_preset`, `generation_strategy`, `add_pedestal`, `target_height_mm`, `art_style`, `target_triangles`, `voxel_size`, `auto_split` | **Meshy AI Alternative**: Direct 1-step conversion from any 2D photo to 3D mesh (`single_hero_34` or `multiview_turnaround`). |
-| 9 | `retopologize_mesh` | `input_mesh_path`, `output_filename`, `mode` (`'quad'` / `'tri'`), `target_count` | **AI Retopology**: Converts dense sculpts into clean topology: Quadriflow all-quads (animation/rigging) or fixed tri budget (games). |
-| 10 | `bake_pbr_textures` | `input_mesh_path`, `output_filename`, `texture_resolution`, `bake_normal`, `bake_ao` | **PBR Texture Baker**: Computes tangent-space Normal maps and Ambient Occlusion (AO) via Blender Cycles, exporting PBR GLB. |
-| 11 | `auto_split_model` | `input_mesh_path`, `output_filename`, `subject_category`, `add_connectors`, `connector_size_mm`, `exploded_distance_mm` | **Auto Split & Keying**: Bisects models into watertight parts with 0.25mm connector pegs/sockets, exploded GLB, and multi-color 3MF. |
-| 12 | `canonicalize_humanoid_pose` | `image_path`, `target_pose` (`'a_pose'`, `'t_pose'`, `'natural'`, `'action_pose'`), `output_filename`, `art_style` | **Pose Guidance**: Eliminates armpit/crotch webbing by standardizing character inputs with visual vector angle overlay. |
-| 13 | `image_to_high_detail_stl` | `image_path`, `output_filename`, `quality_preset`, `target_height_mm`, `target_triangles`, `voxel_size`, `add_pedestal`, `art_style` | Full end-to-end manufacturing pipeline with automatic Approval Gate validation and 3D print preparation. |
-| 14 | `recalculate_in_ultra_production` | `output_filename` | 1-Click recalculation: Re-runs 3D generation on the latest concept using 100k polygon budget and dense remeshing. |
-| 15 | `prepare_for_3d_print` | `input_mesh_path`, `output_filename`, `target_height_mm`, `target_triangles`, `voxel_size`, `smooth_iterations`, `add_pedestal` | Repairs existing meshes, normalizes scale to millimeters, forces Z=0 bed grounding, and guarantees watertightness. |
-| 16 | `capture_multiview_sheet` | `mesh_path`, `output_filename` | Renders a 4-view studio LookDev sheet (Isometric 3/4 Hero, Front Close-Up, Profile, Rear View). |
+| 4 | `compile_3d_master_prompt` | `subject`, `art_style`, `key_details`, `add_pedestal_base`, `humanoid_pose`, `generation_strategy` | Compiles an ultra-detailed Meshy AI Single-Master 3/4 prompt for Antigravity native generation with anti-occlusion & zero-effects directives. |
+| 5 | `align_multiview_concept` | `concept_path` | Crops quadrants, isolates main subject via connected components, locks Y-bounding-box, and enhances albedo. |
+| 6 | `confirm_concept_and_build_3d` | `concept_path`, `output_filename`, `quality_preset`, `target_height_mm`, `add_pedestal`, `art_style`, `target_triangles`, `voxel_size`, `auto_split` | **Hard Approval Gate**: Invocable after user confirmation to execute 3D neural reconstruction and Blender pipeline. |
+| 7 | `direct_image_to_3d` | `image_path`, `output_filename`, `quality_preset`, `generation_strategy`, `add_pedestal`, `target_height_mm`, `art_style`, `target_triangles`, `voxel_size`, `auto_split` | **Primary 3D Entry Point**: Converts approved 2D concept or user image to 3D with rembg, CLAHE, Hunyuan3D-2, and Blender manufacturing. |
+| 8 | `retopologize_mesh` | `input_mesh_path`, `output_filename`, `mode` (`'quad'` / `'tri'`), `target_count` | **AI Retopology**: Converts dense sculpts into clean topology: Quadriflow all-quads (animation/rigging) or fixed tri budget (games). |
+| 9 | `bake_pbr_textures` | `input_mesh_path`, `output_filename`, `texture_resolution`, `bake_normal`, `bake_ao` | **PBR Texture Baker**: Computes tangent-space Normal maps and Ambient Occlusion (AO) via Blender Cycles, exporting PBR GLB. |
+| 10 | `auto_split_model` | `input_mesh_path`, `output_filename`, `subject_category`, `add_connectors`, `connector_size_mm`, `exploded_distance_mm` | **Auto Split & Keying**: Bisects models into watertight parts with 0.25mm connector pegs/sockets, exploded GLB, and multi-color 3MF. |
+| 11 | `canonicalize_humanoid_pose` | `image_path`, `target_pose` (`'a_pose'`, `'t_pose'`, `'natural'`, `'action_pose'`), `output_filename`, `art_style` | **Pose Guidance**: Eliminates armpit/crotch webbing by standardizing character inputs with visual vector angle overlay. |
+| 12 | `image_to_high_detail_stl` | `image_path`, `output_filename`, `quality_preset`, `target_height_mm`, `target_triangles`, `voxel_size`, `add_pedestal`, `art_style` | Full end-to-end manufacturing pipeline with automatic Approval Gate validation and 3D print preparation. |
+| 13 | `recalculate_in_ultra_production` | `output_filename` | 1-Click recalculation: Re-runs 3D generation on the latest concept using 100k polygon budget and dense remeshing. |
+| 14 | `prepare_for_3d_print` | `input_mesh_path`, `output_filename`, `target_height_mm`, `target_triangles`, `voxel_size`, `smooth_iterations`, `add_pedestal` | Repairs existing meshes, normalizes scale to millimeters, forces Z=0 bed grounding, and guarantees watertightness. |
+| 15 | `capture_multiview_sheet` | `mesh_path`, `output_filename` | Renders a 4-view studio LookDev sheet (Isometric 3/4 Hero, Front Close-Up, Profile, Rear View). |
 
 ---
 
@@ -176,9 +175,9 @@ Here are examples of how to query your AI assistant once Local3D Studio is conne
 
 ### 1. Generating a New 3D Printable Character from Prompt
 > *"Create a 3D-printable warrior dwarf in A-Pose with full beard and battle hammer. Follow the Local3D Studio approval gate workflow."*
-- The AI will call `compile_3d_master_prompt` and `generate_concept_image`.
+- The AI will call `compile_3d_master_prompt` and generate the 2D concept with Antigravity's native multimodal generator.
 - The AI presents the 2D concept image and pauses for your approval.
-- Once you say *"Approved"*, the AI calls `confirm_concept_and_build_3d` to output `.stl`, `.glb`, and LookDev render.
+- Once you say *"Approved"*, the AI calls `direct_image_to_3d` to output `.stl`, `.glb`, and LookDev render.
 
 ### 2. Auto-Splitting a Model for 3D Printing / Bambu Studio AMS
 > *"Take the Santa Claus STL and auto-split it into keyed parts for multi-color printing on my Bambu Lab printer."*
