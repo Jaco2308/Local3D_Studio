@@ -118,11 +118,20 @@ bpy.ops.object.delete()
 for m in list(bpy.data.meshes):
     bpy.data.meshes.remove(m)
 
-# 1. Import Raw High-Res GLB
-bpy.ops.import_scene.gltf(filepath={repr(input_glb_path)})
+# 1. Import Raw Mesh (.glb, .gltf, .stl, .obj)
+input_p = {repr(input_glb_path)}
+ext = input_p.lower().split('.')[-1]
+if ext in ['glb', 'gltf']:
+    bpy.ops.import_scene.gltf(filepath=input_p)
+elif ext == 'stl':
+    bpy.ops.wm.stl_import(filepath=input_p)
+elif ext == 'obj':
+    bpy.ops.wm.obj_import(filepath=input_p)
+else:
+    raise RuntimeError(f'Unsupported mesh format: {{ext}}')
 mesh_objs = [o for o in bpy.context.scene.objects if o.type == 'MESH']
 if not mesh_objs:
-    raise RuntimeError('No mesh objects found in imported GLB.')
+    raise RuntimeError('No mesh objects found in imported mesh.')
 
 # Join initial split sub-parts if present
 bpy.ops.object.select_all(action='DESELECT')
@@ -373,12 +382,12 @@ bpy.ops.render.render(write_still=True)
 print('[BlenderPipeline] High-fidelity generic post-processing completed.')
 """
 
-            print(f"[BlenderPipeline] Launching headless Blender: {blender_bin}...")
-            cmd = [blender_bin, "--background", "--python-expr", blender_script]
-            proc = subprocess.run(cmd, capture_output=True, text=True)
+            print(f"[BlenderPipeline] Launching headless Blender: {blender_bin}...", file=sys.stderr)
+            cmd = [blender_bin, "--background", "--factory-startup", "-noaudio", "--python-expr", blender_script]
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
 
             if proc.returncode != 0:
-                print(f"[BlenderPipeline] Error stderr:\n{proc.stderr}")
+                print(f"[BlenderPipeline] Error stderr:\n{proc.stderr}", file=sys.stderr)
                 raise RuntimeError(f"Blender pipeline execution failed with returncode {proc.returncode}:\n{proc.stderr}")
 
             # Assemble composite LookDev sheet directly into OUTPUT_DIR
@@ -409,9 +418,9 @@ print('[BlenderPipeline] High-fidelity generic post-processing completed.')
                 mesh_3mf = trimesh.load(stl_out)
                 mesh_3mf.export(threemf_out)
                 has_3mf = True
-                print(f"[BlenderPipeline] Exported native 3MF model: {threemf_out}")
+                print(f"[BlenderPipeline] Exported native 3MF model: {threemf_out}", file=sys.stderr)
         except Exception as e:
-            print(f"[BlenderPipeline] Note generating 3MF: {e}")
+            print(f"[BlenderPipeline] Note generating 3MF: {e}", file=sys.stderr)
 
         return {
             "status": "success",
@@ -420,6 +429,149 @@ print('[BlenderPipeline] High-fidelity generic post-processing completed.')
             "3mf_path": threemf_out if has_3mf else None,
             "lookdev_sheet_path": sheet_out,
             "telemetry": telemetry
+        }
+
+    @classmethod
+    def render_lookdev_only(
+        cls,
+        input_mesh_path: str,
+        output_name: str = "lookdev_multiview"
+    ) -> Dict[str, Any]:
+        """
+        Lightweight, fast 4-view studio LookDev renderer (~2.5s) for existing .glb, .stl, or .obj meshes
+        without modifying geometry or re-exporting STL/GLB/3MF.
+        """
+        input_mesh_path = os.path.abspath(input_mesh_path)
+        if not os.path.exists(input_mesh_path):
+            raise FileNotFoundError(f"Input mesh not found: {input_mesh_path}")
+
+        hw = HardwareManager.get_instance()
+        blender_bin = hw.blender_path
+        if not blender_bin or not os.path.exists(blender_bin):
+            raise FileNotFoundError(f"Blender executable not found: {blender_bin}")
+
+        sheet_out = str(OUTPUT_DIR / f"{output_name}_lookdev_sheet.png")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            hero_png = str(tmp_path / "panel_hero.png")
+            front_png = str(tmp_path / "panel_front.png")
+            side_png = str(tmp_path / "panel_side.png")
+            rear_png = str(tmp_path / "panel_rear.png")
+
+            blender_script = f"""
+import bpy, mathutils, math
+
+bpy.ops.object.select_all(action='SELECT')
+bpy.ops.object.delete()
+
+input_p = {repr(input_mesh_path)}
+ext = input_p.lower().split('.')[-1]
+if ext in ['glb', 'gltf']:
+    bpy.ops.import_scene.gltf(filepath=input_p)
+elif ext == 'stl':
+    bpy.ops.wm.stl_import(filepath=input_p)
+elif ext == 'obj':
+    bpy.ops.wm.obj_import(filepath=input_p)
+else:
+    raise RuntimeError(f'Unsupported mesh format: {{ext}}')
+
+mesh_objs = [o for o in bpy.context.scene.objects if o.type == 'MESH']
+if not mesh_objs:
+    raise RuntimeError('No mesh objects found in imported mesh.')
+
+bpy.ops.object.select_all(action='DESELECT')
+for o in mesh_objs:
+    o.select_set(True)
+bpy.context.view_layer.objects.active = mesh_objs[0]
+if len(mesh_objs) > 1:
+    bpy.ops.object.join()
+target_obj = bpy.context.active_object
+
+bbox_world = [target_obj.matrix_world @ mathutils.Vector(corner) for corner in target_obj.bound_box]
+min_z = min(v.z for v in bbox_world)
+cx = (min(v.x for v in bbox_world) + max(v.x for v in bbox_world)) / 2.0
+cy = (min(v.y for v in bbox_world) + max(v.y for v in bbox_world)) / 2.0
+target_obj.location.z -= min_z
+target_obj.location.x -= cx
+target_obj.location.y -= cy
+bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+bpy.ops.object.shade_smooth()
+
+key_data = bpy.data.lights.new('SunKey', 'SUN')
+key_data.energy = 3.2
+key_obj = bpy.data.objects.new('SunKey', key_data)
+bpy.context.collection.objects.link(key_obj)
+key_obj.rotation_euler = (math.radians(35), math.radians(-20), math.radians(-40))
+
+fill_data = bpy.data.lights.new('SunFill', 'SUN')
+fill_data.energy = 2.4
+fill_obj = bpy.data.objects.new('SunFill', fill_data)
+bpy.context.collection.objects.link(fill_obj)
+fill_obj.rotation_euler = (math.radians(20), 0, math.radians(10))
+
+rim_data = bpy.data.lights.new('SunRim', 'SUN')
+rim_data.energy = 2.4
+rim_obj = bpy.data.objects.new('SunRim', rim_data)
+bpy.context.collection.objects.link(rim_obj)
+rim_obj.rotation_euler = (math.radians(40), 0, math.radians(150))
+
+cam_data = bpy.data.cameras.new('LookDevCam')
+cam_obj = bpy.data.objects.new('LookDevCam', cam_data)
+bpy.context.collection.objects.link(cam_obj)
+bpy.context.scene.camera = cam_obj
+
+bpy.context.scene.render.resolution_x = 750
+bpy.context.scene.render.resolution_y = 750
+
+max_dim = max(target_obj.dimensions.x, target_obj.dimensions.y, target_obj.dimensions.z, 0.01)
+center_z = target_obj.dimensions.z * 0.50
+target_pt = mathutils.Vector((0, 0, center_z))
+cam_dist = max_dim * 2.30
+cam_data.clip_end = max(cam_dist * 10.0, 100.0)
+
+cam_data.type = 'PERSP'
+cam_data.lens = 45.0
+cam_obj.location = (-cam_dist * 0.65, -cam_dist * 0.75, center_z + cam_dist * 0.40)
+cam_obj.rotation_euler = (target_pt - cam_obj.location).to_track_quat('-Z', 'Y').to_euler()
+bpy.context.scene.render.filepath = {repr(hero_png)}
+bpy.ops.render.render(write_still=True)
+
+cam_obj.location = (0, -cam_dist * 0.95, center_z)
+cam_obj.rotation_euler = (target_pt - cam_obj.location).to_track_quat('-Z', 'Y').to_euler()
+bpy.context.scene.render.filepath = {repr(front_png)}
+bpy.ops.render.render(write_still=True)
+
+cam_data.type = 'ORTHO'
+cam_data.ortho_scale = max_dim * 1.30
+cam_obj.location = (-cam_dist, 0, center_z)
+cam_obj.rotation_euler = (math.radians(90), 0, math.radians(-90))
+bpy.context.scene.render.filepath = {repr(side_png)}
+bpy.ops.render.render(write_still=True)
+
+cam_obj.location = (0, cam_dist, center_z)
+cam_obj.rotation_euler = (math.radians(90), 0, math.radians(180))
+bpy.context.scene.render.filepath = {repr(rear_png)}
+bpy.ops.render.render(write_still=True)
+"""
+            cmd = [blender_bin, "--background", "--factory-startup", "-noaudio", "--python-expr", blender_script]
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            if proc.returncode != 0:
+                print(f"[BlenderPipeline] LookDev render stderr:\n{proc.stderr}", file=sys.stderr)
+                raise RuntimeError(f"Blender LookDev render failed with code {proc.returncode}:\n{proc.stderr}")
+
+            cls._assemble_lookdev_sheet(
+                hero_png=hero_png,
+                front_png=front_png,
+                side_png=side_png,
+                rear_png=rear_png,
+                output_sheet_path=sheet_out,
+                title=f"{output_name.replace('_', ' ').upper()} — STUDIO LOOKDEV",
+                subtitle=f"{hw.tier_config.label} | 4-View Studio Inspection | {hw.cpu_name}"
+            )
+
+        return {
+            "status": "success",
+            "lookdev_sheet_path": sheet_out
         }
 
     @classmethod
@@ -472,7 +624,7 @@ print('[BlenderPipeline] High-fidelity generic post-processing completed.')
             draw.text(pos, text, fill=(240, 240, 245), font=font_label)
 
         canvas.save(output_sheet_path, quality=95)
-        print(f"[BlenderPipeline] LookDev sheet saved to: {output_sheet_path}")
+        print(f"[BlenderPipeline] LookDev sheet saved to: {output_sheet_path}", file=sys.stderr)
         return output_sheet_path
 
     @classmethod
@@ -644,10 +796,10 @@ print('[Blender] Retopology export completed successfully.')
             with open(py_file, "w") as f:
                 f.write(blender_script)
 
-            cmd = [blender_bin, "--background", "--python", str(py_file)]
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            cmd = [blender_bin, "--background", "--factory-startup", "-noaudio", "--python", str(py_file)]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=180)
             if res.returncode != 0:
-                print(f"[BlenderPipeline] Retopology error:\n{res.stderr}")
+                print(f"[BlenderPipeline] Retopology error:\n{res.stderr}", file=sys.stderr)
                 raise RuntimeError(f"Blender retopology failed with code {res.returncode}:\n{res.stderr}")
 
             telemetry = {}
@@ -662,7 +814,7 @@ print('[Blender] Retopology export completed successfully.')
                 mesh.export(threemf_out, file_type='3mf')
                 has_3mf = True
             except Exception as e:
-                print(f"[BlenderPipeline] Note generating 3MF for retopo: {e}")
+                print(f"[BlenderPipeline] Note generating 3MF for retopo: {e}", file=sys.stderr)
                 has_3mf = False
 
             return {
@@ -720,6 +872,8 @@ if ext in ['glb', 'gltf']:
     bpy.ops.import_scene.gltf(filepath=input_p)
 elif ext == 'stl':
     bpy.ops.wm.stl_import(filepath=input_p)
+elif ext == 'obj':
+    bpy.ops.wm.obj_import(filepath=input_p)
 
 mesh_objs = [o for o in bpy.context.scene.objects if o.type == 'MESH']
 if not mesh_objs:
@@ -808,10 +962,10 @@ print('[Blender] PBR Texture Baking export completed successfully.')
             with open(py_file, "w") as f:
                 f.write(blender_script)
 
-            cmd = [blender_bin, "--background", "--python", str(py_file)]
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            cmd = [blender_bin, "--background", "--factory-startup", "-noaudio", "--python", str(py_file)]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=180)
             if res.returncode != 0:
-                print(f"[BlenderPipeline] Bake error:\n{res.stderr}")
+                print(f"[BlenderPipeline] Bake error:\n{res.stderr}", file=sys.stderr)
                 raise RuntimeError(f"Blender texture baking failed with code {res.returncode}:\n{res.stderr}")
 
             return {

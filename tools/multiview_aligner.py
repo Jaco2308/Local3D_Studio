@@ -14,6 +14,7 @@ Implements:
 """
 
 import os
+import sys
 import tempfile
 from pathlib import Path
 from typing import Tuple, Optional, Dict, Any, List
@@ -234,7 +235,7 @@ class MultiviewAligner:
         if not force_recompute and all(p.exists() for p in [cached_front, cached_left, cached_right, cached_back]):
             concept_mtime = concept_path.stat().st_mtime
             if min(p.stat().st_mtime for p in [cached_front, cached_left, cached_right, cached_back]) >= concept_mtime:
-                print(f"[MultiviewAligner] Cache Hit for '{stem}'. Reusing aligned 4 views.")
+                print(f"[MultiviewAligner] Cache Hit for '{stem}'. Reusing aligned 4 views.", file=sys.stderr)
                 return {
                     "status": "cached",
                     "front_path": str(cached_front),
@@ -263,13 +264,13 @@ class MultiviewAligner:
             side_raw = full_rgb.crop((dividers[1], 0, dividers[2], h))
             back_raw = full_rgb.crop((dividers[2], 0, dividers[3], h))
 
-        print("[MultiviewAligner] Isolating Slice 1/3 (FRONT) with Anti-Bleed...")
+        print("[MultiviewAligner] Isolating Slice 1/3 (FRONT) with Anti-Bleed...", file=sys.stderr)
         front_crop = cls.isolate_slice_crop(front_raw)
 
-        print("[MultiviewAligner] Isolating Slice 2/3 (SIDE PROFILE) with Anti-Bleed...")
+        print("[MultiviewAligner] Isolating Slice 2/3 (SIDE PROFILE) with Anti-Bleed...", file=sys.stderr)
         side_crop = cls.isolate_slice_crop(side_raw)
 
-        print("[MultiviewAligner] Isolating Slice 3/3 (BACK) with Anti-Bleed...")
+        print("[MultiviewAligner] Isolating Slice 3/3 (BACK) with Anti-Bleed...", file=sys.stderr)
         back_crop = cls.isolate_slice_crop(back_raw)
 
         crops = [c for c in [front_crop, side_crop, back_crop] if c is not None]
@@ -317,7 +318,7 @@ class MultiviewAligner:
 
         # 3. Profile Orientation Detection & 4th view (Right) Generation
         detected_orient = cls.detect_profile_orientation(side_aligned)
-        print(f"[MultiviewAligner] Side profile detected orientation: facing {detected_orient.upper()}")
+        print(f"[MultiviewAligner] Side profile detected orientation: facing {detected_orient.upper()}", file=sys.stderr)
 
         if detected_orient == "left":
             left_aligned = side_aligned
@@ -327,7 +328,7 @@ class MultiviewAligner:
             left_aligned = side_aligned.transpose(Image.FLIP_LEFT_RIGHT)
 
         # 4. Pre-Processing: Depth-Crevice Enhancer (CLAHE + Unsharp Mask) on all 4 views
-        print("[MultiviewAligner] Applying Depth-Crevice Enhancer (CLAHE + Unsharp Mask) across all 4 views...")
+        print("[MultiviewAligner] Applying Depth-Crevice Enhancer (CLAHE + Unsharp Mask) across all 4 views...", file=sys.stderr)
         front_enhanced = cls.enhance_depth_crevices(front_aligned)
         left_enhanced = cls.enhance_depth_crevices(left_aligned)
         right_enhanced = cls.enhance_depth_crevices(right_aligned)
@@ -382,7 +383,7 @@ class MultiviewAligner:
             draw.text((22, cls.Y_OFFSET_BOTTOM - 18), "GROUND PLANE LOCK (Z=0)", fill=(134, 239, 172))
 
             preview_img.save(preview_path, "JPEG", quality=95)
-            print(f"[MultiviewAligner] 4-panel aligned verification sheet saved: {preview_path}")
+            print(f"[MultiviewAligner] 4-panel aligned verification sheet saved: {preview_path}", file=sys.stderr)
 
         return {
             "status": "success",
@@ -429,6 +430,24 @@ class MultiviewAligner:
             BackgroundRemovalEngine.remove_background(image_path, tmp_rgba_path, replace_with_white=False)
             with Image.open(tmp_rgba_path) as raw_rgba:
                 rgba_pil = raw_rgba.convert("RGBA")
+
+            # Check if source concept has an integrated display pedestal/diorama base
+            with Image.open(image_path) as raw_rgb:
+                raw_rgb_np = np.array(raw_rgb.convert("RGB"))
+                lum = np.mean(raw_rgb_np, axis=2)
+                dark_regions = (lum < 220)
+                rembg_alpha = np.array(rgba_pil)[:, :, 3]
+                combined_mask = (rembg_alpha > 10) | dark_regions
+                from scipy.ndimage import binary_fill_holes, label
+                combined_mask = binary_fill_holes(combined_mask)
+                lbl, n_feat = label(combined_mask)
+                if n_feat >= 1:
+                    szs = [np.sum(lbl == i) for i in range(1, n_feat + 1)]
+                    b_lbl = np.argmax(szs) + 1
+                    dominant = (lbl == b_lbl)
+                    if np.sum(dominant) > np.sum(rembg_alpha > 10) * 1.05:
+                        rgba_arr = np.dstack([raw_rgb_np, (dominant * 255).astype(np.uint8)])
+                        rgba_pil = Image.fromarray(rgba_arr)
         finally:
             if os.path.exists(tmp_rgba_path):
                 os.remove(tmp_rgba_path)
@@ -491,5 +510,5 @@ class MultiviewAligner:
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
         final_rgb = white_canvas.convert("RGB")
         final_rgb.save(output_path, "PNG")
-        print(f"[MultiviewAligner] Cleaned and calibrated hero image saved to: {output_path} (ground_y={ground_y}, height={new_h}px)")
+        print(f"[MultiviewAligner] Cleaned and calibrated hero image saved to: {output_path} (ground_y={ground_y}, height={new_h}px)", file=sys.stderr)
         return output_path

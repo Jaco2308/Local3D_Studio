@@ -162,6 +162,7 @@ class PoseCanonicalizer:
         # Scale and center source character
         w, h = src_img.size
         scale = min(820.0 / float(w), 820.0 / float(h))
+        new_w = int(w * scale)
         new_h = int(h * scale)
         resized = src_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
         

@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import re
+import contextlib
 from pathlib import Path
 from typing import Optional
 
@@ -19,12 +20,15 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from mcp.server.mcpserver import MCPServer
 from core.config import OUTPUT_DIR
-from core.hardware_backend import HardwareManager
 from tools.pipeline_engine import PipelineEngine, load_state, save_state
 
-# Initialize MCP Server & Hardware Manager
+# Initialize MCP Server immediately (<50ms boot time for instant MCP stdio handshake)
 server = MCPServer("Local3D-Studio")
-hw = HardwareManager.get_instance()
+
+
+def _get_hw():
+    from core.hardware_backend import HardwareManager
+    return HardwareManager.get_instance()
 
 
 APPROVAL_STATE_FILE = OUTPUT_DIR / ".state_gate.json"
@@ -48,17 +52,19 @@ def get_hardware_status() -> str:
     and local execution status.
     """
     try:
-        hw_summary = hw.get_summary()
-        active_mode = PipelineEngine.get_quality_mode()
-        res = {
-            "telemetry_badge": hw.get_hardware_badge(),
-            "execution_mode": "pure_local_in_process",
-            "localhost_required": False,
-            "selected_quality_mode": active_mode,
-            "active_tier": hw.tier_config.to_dict(),
-            "hardware": hw_summary,
-            "blender_path": hw.blender_path or "NOT_FOUND"
-        }
+        with contextlib.redirect_stdout(sys.stderr):
+            hw = _get_hw()
+            hw_summary = hw.get_summary()
+            active_mode = PipelineEngine.get_quality_mode()
+            res = {
+                "telemetry_badge": hw.get_hardware_badge(),
+                "execution_mode": "pure_local_in_process",
+                "localhost_required": False,
+                "selected_quality_mode": active_mode,
+                "active_tier": hw.tier_config.to_dict(),
+                "hardware": hw_summary,
+                "blender_path": hw.blender_path or "NOT_FOUND"
+            }
         return json.dumps(res, indent=2)
     except Exception as e:
         return json.dumps({"status": "error", "error": str(e)}, indent=2)
@@ -79,7 +85,8 @@ def set_quality_preset(preset: str = "auto") -> str:
     if preset not in ["fast_draft", "auto", "ultra_production"]:
         return json.dumps({"status": "error", "message": f"Invalid preset: '{preset}'. Must be 'fast_draft', 'auto', or 'ultra_production'."}, indent=2)
     
-    success = PipelineEngine.set_quality_mode(preset)
+    with contextlib.redirect_stdout(sys.stderr):
+        success = PipelineEngine.set_quality_mode(preset)
     return json.dumps({
         "status": "success" if success else "warning",
         "quality_preset": preset,
@@ -119,15 +126,16 @@ def enhance_prompt_for_3d(
         humanoid_pose: Pose guidance for humanoid characters ('a_pose', 't_pose', 'action_pose', 'natural').
     """
     try:
-        from tools.prompt_enhancer import enhance_prompt_for_3d as _enhance
-        enhanced = _enhance(
-            user_prompt=prompt,
-            mode=mode,
-            art_style=art_style,
-            multiview=multiview,
-            add_pedestal_base=add_pedestal_base,
-            humanoid_pose=humanoid_pose
-        )
+        with contextlib.redirect_stdout(sys.stderr):
+            from tools.prompt_enhancer import enhance_prompt_for_3d as _enhance
+            enhanced = _enhance(
+                user_prompt=prompt,
+                mode=mode,
+                art_style=art_style,
+                multiview=multiview,
+                add_pedestal_base=add_pedestal_base,
+                humanoid_pose=humanoid_pose
+            )
         return json.dumps({
             "original_prompt": prompt,
             "enhanced_prompt": enhanced,
@@ -161,18 +169,19 @@ def compile_3d_master_prompt(
     Returns the compiled prompt with the mandatory directive for the agent to generate natively and halt.
     """
     try:
-        strat = generation_strategy.lower().strip()
-        from tools.prompt_enhancer import compile_3d_master_prompt as _compile
-        compiled = _compile(
-            subject=subject,
-            art_style=art_style,
-            key_details=key_details or [],
-            add_pedestal_base=add_pedestal_base,
-            humanoid_pose=humanoid_pose,
-            generation_strategy=strat
-        )
-        clean_name = re.sub(r'[^a-zA-Z0-9_-]', '_', subject.lower().strip())
-        clean_name = re.sub(r'_+', '_', clean_name).strip('_') or "concept"
+        with contextlib.redirect_stdout(sys.stderr):
+            strat = generation_strategy.lower().strip()
+            from tools.prompt_enhancer import compile_3d_master_prompt as _compile
+            compiled = _compile(
+                subject=subject,
+                art_style=art_style,
+                key_details=key_details or [],
+                add_pedestal_base=add_pedestal_base,
+                humanoid_pose=humanoid_pose,
+                generation_strategy=strat
+            )
+            clean_name = re.sub(r'[^a-zA-Z0-9_-]', '_', subject.lower().strip())
+            clean_name = re.sub(r'_+', '_', clean_name).strip('_') or "concept"
         return json.dumps({
             "subject": subject,
             "art_style": art_style,
@@ -216,15 +225,16 @@ def align_multiview_concept(
             return json.dumps({"status": "error", "message": "No concept image found to align."}, indent=2)
 
     try:
-        from tools.multiview_aligner import MultiviewAligner
-        res = MultiviewAligner.split_and_align_multiview(
-            concept_image_path=target,
-            output_dir=str(OUTPUT_DIR),
-            save_preview=True
-        )
-        gate_state["concept_path"] = os.path.abspath(target)
-        gate_state["approved"] = False
-        _save_approval_state(gate_state)
+        with contextlib.redirect_stdout(sys.stderr):
+            from tools.multiview_aligner import MultiviewAligner
+            res = MultiviewAligner.split_and_align_multiview(
+                concept_image_path=target,
+                output_dir=str(OUTPUT_DIR),
+                save_preview=True
+            )
+            gate_state["concept_path"] = os.path.abspath(target)
+            gate_state["approved"] = False
+            _save_approval_state(gate_state)
         return json.dumps({
             "status": "waiting_user_approval",
             "preview_path": res["preview_path"],
@@ -240,7 +250,6 @@ def align_multiview_concept(
         }, indent=2)
     except Exception as e:
         return json.dumps({"status": "error", "error": str(e)}, indent=2)
-
 
 
 @server.tool()
@@ -281,32 +290,32 @@ def confirm_concept_and_build_3d(
             "message": f"Nessun concept 2D valido trovato da confermare a percorso: {target_image}"
         }, indent=2)
 
-    # Approve state & persist
     gate_state["approved"] = True
     gate_state["concept_path"] = os.path.abspath(target_image)
     _save_approval_state(gate_state)
 
     try:
-        effective_preset = quality_preset.lower().strip()
-        if effective_preset == "auto":
-            local_mode = PipelineEngine.get_quality_mode()
-            if local_mode in ["fast_draft", "ultra_production"]:
-                effective_preset = local_mode
+        with contextlib.redirect_stdout(sys.stderr):
+            effective_preset = quality_preset.lower().strip()
+            if effective_preset == "auto":
+                local_mode = PipelineEngine.get_quality_mode()
+                if local_mode in ["fast_draft", "ultra_production"]:
+                    effective_preset = local_mode
 
-        effective_strategy = generation_strategy or gate_state.get("generation_strategy", "auto")
+            effective_strategy = generation_strategy or gate_state.get("generation_strategy", "auto")
 
-        result = PipelineEngine.run_pipeline(
-            image_path=target_image,
-            output_name=output_filename,
-            quality_preset=effective_preset,
-            generation_strategy=effective_strategy,
-            target_height_mm=target_height_mm,
-            add_pedestal=add_pedestal,
-            art_style=art_style,
-            target_triangles=target_triangles,
-            voxel_size=voxel_size,
-            auto_split=auto_split
-        )
+            result = PipelineEngine.run_pipeline(
+                image_path=target_image,
+                output_name=output_filename,
+                quality_preset=effective_preset,
+                generation_strategy=effective_strategy,
+                target_height_mm=target_height_mm,
+                add_pedestal=add_pedestal,
+                art_style=art_style,
+                target_triangles=target_triangles,
+                voxel_size=voxel_size,
+                auto_split=auto_split
+            )
         return json.dumps(result, indent=2)
     except Exception as e:
         return json.dumps({"status": "error", "error": str(e)}, indent=2)
@@ -352,22 +361,23 @@ def image_to_high_detail_stl(
         }, indent=2)
 
     try:
-        effective_preset = quality_preset.lower().strip()
-        if effective_preset == "auto":
-            local_mode = PipelineEngine.get_quality_mode()
-            if local_mode in ["fast_draft", "ultra_production"]:
-                effective_preset = local_mode
+        with contextlib.redirect_stdout(sys.stderr):
+            effective_preset = quality_preset.lower().strip()
+            if effective_preset == "auto":
+                local_mode = PipelineEngine.get_quality_mode()
+                if local_mode in ["fast_draft", "ultra_production"]:
+                    effective_preset = local_mode
 
-        result = PipelineEngine.run_pipeline(
-            image_path=image_path,
-            output_name=output_filename,
-            quality_preset=effective_preset,
-            target_height_mm=target_height_mm,
-            add_pedestal=add_pedestal,
-            art_style=art_style,
-            target_triangles=target_triangles,
-            voxel_size=voxel_size
-        )
+            result = PipelineEngine.run_pipeline(
+                image_path=image_path,
+                output_name=output_filename,
+                quality_preset=effective_preset,
+                target_height_mm=target_height_mm,
+                add_pedestal=add_pedestal,
+                art_style=art_style,
+                target_triangles=target_triangles,
+                voxel_size=voxel_size
+            )
         return json.dumps(result, indent=2)
     except Exception as e:
         return json.dumps({"status": "error", "error": str(e)}, indent=2)
@@ -384,7 +394,8 @@ def recalculate_in_ultra_production(output_filename: str = "recalculated_ultra_1
         output_filename: Base filename for the upgraded 100k triangle model.
     """
     try:
-        res = PipelineEngine.recalculate(quality_preset="ultra_production", output_name=output_filename)
+        with contextlib.redirect_stdout(sys.stderr):
+            res = PipelineEngine.recalculate(quality_preset="ultra_production", output_name=output_filename)
         return json.dumps(res, indent=2)
     except Exception as e:
         return json.dumps({"status": "error", "error": str(e)}, indent=2)
@@ -405,7 +416,7 @@ def prepare_for_3d_print(
     Voxel Remesh, Corrective Smooth, Decimation to tier polygon budget, scaling in mm, and flat base alignment on Z=0.
     
     Args:
-        input_mesh_path: Path to existing 3D file (.glb, .stl).
+        input_mesh_path: Path to existing 3D file (.glb, .stl, .obj).
         output_filename: Base output name.
         target_height_mm: Height in millimeters (e.g. 100.0).
         target_triangles: Polygon count (optional, auto-scaled from hardware tier).
@@ -414,21 +425,22 @@ def prepare_for_3d_print(
         add_pedestal: Whether to add a flat circular base.
     """
     try:
-        from tools.blender_pipeline import BlenderPipeline
-        res = BlenderPipeline.process_and_export(
-            input_glb_path=input_mesh_path,
-            target_height_mm=target_height_mm,
-            target_triangles=target_triangles or 80000,
-            voxel_size=voxel_size or 0.005,
-            smooth_iterations=smooth_iterations,
-            add_pedestal=add_pedestal,
-            output_name=output_filename
-        )
-        res["execution_mode"] = "pure_local"
-        res["stl_uri"] = f"file://{res['stl_path']}"
-        res["glb_uri"] = f"file://{res['glb_path']}"
-        if res.get("3mf_path"):
-            res["3mf_uri"] = f"file://{res['3mf_path']}"
+        with contextlib.redirect_stdout(sys.stderr):
+            from tools.blender_pipeline import BlenderPipeline
+            res = BlenderPipeline.process_and_export(
+                input_glb_path=input_mesh_path,
+                target_height_mm=target_height_mm,
+                target_triangles=target_triangles or 80000,
+                voxel_size=voxel_size or 0.005,
+                smooth_iterations=smooth_iterations,
+                add_pedestal=add_pedestal,
+                output_name=output_filename
+            )
+            res["execution_mode"] = "pure_local"
+            res["stl_uri"] = f"file://{res['stl_path']}"
+            res["glb_uri"] = f"file://{res['glb_path']}"
+            if res.get("3mf_path"):
+                res["3mf_uri"] = f"file://{res['3mf_path']}"
         return json.dumps(res, indent=2)
     except Exception as e:
         return json.dumps({"status": "error", "error": str(e)}, indent=2)
@@ -438,17 +450,16 @@ def prepare_for_3d_print(
 def capture_multiview_sheet(mesh_path: str, output_filename: str = "lookdev_multiview") -> str:
     """
     Renders a 4-view studio LookDev sheet (Perspective 3/4 Hero, Front Close-Up, Side Profile, Rear View)
-    for a given 3D mesh (.glb or .stl) and returns the composite image path.
+    for a given 3D mesh (.glb, .stl, or .obj) in ~2.5s without re-running mesh decimation or remeshing.
     """
     try:
-        from tools.blender_pipeline import BlenderPipeline
-        res = BlenderPipeline.process_and_export(
-            input_glb_path=mesh_path,
-            smooth_iterations=0,
-            add_pedestal=False,
-            output_name=output_filename
-        )
-        sheet_path = res.get("lookdev_sheet_path")
+        with contextlib.redirect_stdout(sys.stderr):
+            from tools.blender_pipeline import BlenderPipeline
+            res = BlenderPipeline.render_lookdev_only(
+                input_mesh_path=mesh_path,
+                output_name=output_filename
+            )
+            sheet_path = res.get("lookdev_sheet_path")
         return json.dumps({
             "status": "success",
             "execution_mode": "pure_local",
@@ -490,18 +501,19 @@ def direct_image_to_3d(
         auto_split: Se suddividere automaticamente il modello in parti con connettori (default: False).
     """
     try:
-        res = PipelineEngine.run_pipeline(
-            image_path=image_path,
-            output_name=output_filename,
-            quality_preset=quality_preset,
-            generation_strategy=generation_strategy,
-            add_pedestal=add_pedestal,
-            target_height_mm=target_height_mm,
-            art_style=art_style,
-            target_triangles=target_triangles,
-            voxel_size=voxel_size,
-            auto_split=auto_split
-        )
+        with contextlib.redirect_stdout(sys.stderr):
+            res = PipelineEngine.run_pipeline(
+                image_path=image_path,
+                output_name=output_filename,
+                quality_preset=quality_preset,
+                generation_strategy=generation_strategy,
+                add_pedestal=add_pedestal,
+                target_height_mm=target_height_mm,
+                art_style=art_style,
+                target_triangles=target_triangles,
+                voxel_size=voxel_size,
+                auto_split=auto_split
+            )
         return json.dumps(res, indent=2)
     except Exception as e:
         return json.dumps({"status": "error", "error": str(e)}, indent=2)
@@ -527,12 +539,13 @@ def retopologize_mesh(
         target_count: Target number of faces/triangles (e.g. 5000, 10000, 50000).
     """
     try:
-        res = PipelineEngine.retopologize(
-            input_mesh_path=input_mesh_path,
-            output_name=output_filename,
-            mode=mode,
-            target_count=target_count
-        )
+        with contextlib.redirect_stdout(sys.stderr):
+            res = PipelineEngine.retopologize(
+                input_mesh_path=input_mesh_path,
+                output_name=output_filename,
+                mode=mode,
+                target_count=target_count
+            )
         return json.dumps(res, indent=2)
     except Exception as e:
         return json.dumps({"status": "error", "error": str(e)}, indent=2)
@@ -559,13 +572,14 @@ def bake_pbr_textures(
         bake_ao: Bake ambient occlusion map (default: True).
     """
     try:
-        res = PipelineEngine.bake_textures(
-            input_mesh_path=input_mesh_path,
-            output_name=output_filename,
-            texture_resolution=texture_resolution,
-            bake_normal=bake_normal,
-            bake_ao=bake_ao
-        )
+        with contextlib.redirect_stdout(sys.stderr):
+            res = PipelineEngine.bake_textures(
+                input_mesh_path=input_mesh_path,
+                output_name=output_filename,
+                texture_resolution=texture_resolution,
+                bake_normal=bake_normal,
+                bake_ao=bake_ao
+            )
         return json.dumps(res, indent=2)
     except Exception as e:
         return json.dumps({"status": "error", "error": str(e)}, indent=2)
@@ -595,14 +609,15 @@ def auto_split_model(
         exploded_distance_mm: Distance in mm to separate parts in exploded view render (default: 16.0 mm).
     """
     try:
-        res = PipelineEngine.split_model(
-            input_mesh_path=input_mesh_path,
-            output_name=output_filename,
-            subject_category=subject_category,
-            add_connectors=add_connectors,
-            connector_size_mm=connector_size_mm,
-            exploded_distance_mm=exploded_distance_mm
-        )
+        with contextlib.redirect_stdout(sys.stderr):
+            res = PipelineEngine.split_model(
+                input_mesh_path=input_mesh_path,
+                output_name=output_filename,
+                subject_category=subject_category,
+                add_connectors=add_connectors,
+                connector_size_mm=connector_size_mm,
+                exploded_distance_mm=exploded_distance_mm
+            )
         return json.dumps(res, indent=2)
     except Exception as e:
         return json.dumps({"status": "error", "error": str(e)}, indent=2)
@@ -634,19 +649,19 @@ def canonicalize_humanoid_pose(
         art_style: Artistic style profile (default: 'faithful_anatomical').
     """
     try:
-        res = PipelineEngine.canonicalize_pose(
-            image_path=image_path,
-            target_pose=target_pose,
-            output_name=output_filename,
-            art_style=art_style
-        )
+        with contextlib.redirect_stdout(sys.stderr):
+            res = PipelineEngine.canonicalize_pose(
+                image_path=image_path,
+                target_pose=target_pose,
+                output_name=output_filename,
+                art_style=art_style
+            )
         return json.dumps(res, indent=2)
     except Exception as e:
         return json.dumps({"status": "error", "error": str(e)}, indent=2)
 
 
 if __name__ == "__main__":
-    print(f"[Local3D Studio] {hw.get_hardware_badge()}", file=sys.stderr)
-    print(f"[Local3D Studio] Strategy: {hw.tier_config.memory_strategy} | Mode: Pure Local In-Process Engine", file=sys.stderr)
-    print("[Local3D Studio] Starting Universal MCP Server over stdio...", file=sys.stderr)
+    print("[Local3D Studio] Starting Universal MCP Server over stdio (Lazy Hardware Init enabled)...", file=sys.stderr)
     server.run(transport="stdio")
+

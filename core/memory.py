@@ -9,6 +9,7 @@ tailored to the active performance tier memory strategy:
 """
 
 import gc
+import sys
 import psutil
 from typing import Optional, Any
 from core.hardware_backend import HardwareManager
@@ -54,7 +55,10 @@ def cleanup_memory(obj_to_delete: Optional[Any] = None, label: str = ""):
     vm = psutil.virtual_memory()
     available_gb = round(vm.available / (1024 ** 3), 2)
     tag = f" [{label}]" if label else ""
-    print(f"[MemoryManager]{tag} Cache flushed. Available RAM: {available_gb} GB (Tier: {hw.tier_config.label} | Strategy: {hw.tier_config.memory_strategy})")
+    print(
+        f"[MemoryManager]{tag} Cache flushed. Available RAM: {available_gb} GB (Tier: {hw.tier_config.label} | Strategy: {hw.tier_config.memory_strategy})",
+        file=sys.stderr
+    )
 
 
 def offload_or_cleanup(pipeline: Any, label: str = "") -> Optional[Any]:
@@ -78,7 +82,7 @@ def offload_or_cleanup(pipeline: Any, label: str = "") -> Optional[Any]:
         try:
             if hasattr(pipeline, "to"):
                 pipeline.to("cpu")
-                print(f"[MemoryManager] Offloaded {label} to CPU RAM cache ({strategy}).")
+                print(f"[MemoryManager] Offloaded {label} to CPU RAM cache ({strategy}).", file=sys.stderr)
                 # Flush GPU caches now that weights reside in system RAM
                 if torch is not None:
                     if torch.cuda.is_available():
@@ -90,12 +94,12 @@ def offload_or_cleanup(pipeline: Any, label: str = "") -> Optional[Any]:
                             pass
                 return pipeline
         except Exception as e:
-            print(f"[MemoryManager] Could not offload {label} to CPU ({e}). Destroying instead.")
+            print(f"[MemoryManager] Could not offload {label} to CPU ({e}). Destroying instead.", file=sys.stderr)
             cleanup_memory(pipeline, label=f"Fallback Unload {label}")
             return None
 
     elif strategy == "VRAM_PINNED":
-        print(f"[MemoryManager] Keeping {label} pinned in VRAM ({strategy}).")
+        print(f"[MemoryManager] Keeping {label} pinned in VRAM ({strategy}).", file=sys.stderr)
         gc.collect()
         return pipeline
 

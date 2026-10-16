@@ -539,11 +539,16 @@ class ModelSplitter:
             cmd = [
                 blender_bin,
                 "--background",
+                "--factory-startup",
+                "-noaudio",
                 "--python", str(script_path)
             ]
 
-            print(f"[ModelSplitter] Running automated hierarchical split in Blender on {input_path} (category: {cat})...")
-            proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
+            print(
+                f"[ModelSplitter] Running automated hierarchical split in Blender on {input_path} (category: {cat})...",
+                file=sys.stderr
+            )
+            proc = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=180)
 
             if proc.returncode != 0 or not results_path.exists():
                 print(f"[ModelSplitter] Blender stderr:\n{proc.stderr}", file=sys.stderr)
@@ -603,7 +608,7 @@ class ModelSplitter:
                     res["multi_color_3mf"] = str(threemf_path)
                     res["multi_color_3mf_uri"] = f"file://{threemf_path}"
             except Exception as e:
-                print(f"[ModelSplitter] Note exporting multi-color 3MF: {e}")
+                print(f"[ModelSplitter] Note exporting multi-color 3MF: {e}", file=sys.stderr)
 
             res["parts_dir_uri"] = f"file://{res['parts_dir']}"
             res["exploded_glb_uri"] = f"file://{res['exploded_glb']}"

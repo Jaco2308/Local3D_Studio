@@ -5,6 +5,7 @@ with ZERO reliance on external HTTP servers, localhost ports, or background daem
 """
 
 import os
+import sys
 import json
 import tempfile
 from pathlib import Path
@@ -12,11 +13,6 @@ from typing import Optional, Dict, Any
 from PIL import Image
 
 from core.config import OUTPUT_DIR, get_effective_3d_settings
-from core.hardware_backend import HardwareManager
-from tools.neural_3d_engine import Neural3DEngine
-from tools.blender_pipeline import BlenderPipeline
-from tools.rembg_engine import BackgroundRemovalEngine
-from tools.multiview_aligner import MultiviewAligner
 
 STATE_FILE = OUTPUT_DIR / ".state_gate.json"
 
@@ -44,10 +40,11 @@ def save_state(state: dict):
         with open(STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2)
     except Exception as e:
-        print(f"[PipelineEngine] Warning saving state: {e}")
+        print(f"[PipelineEngine] Warning saving state: {e}", file=sys.stderr)
 
 
 def resolve_quality_preset_settings(preset: str = "auto") -> Dict[str, Any]:
+    from core.hardware_backend import HardwareManager
     hw = HardwareManager.get_instance()
     p = preset.lower().strip()
     tier_cfg = hw.tier_config
@@ -133,6 +130,10 @@ class PipelineEngine:
         3. Blender high-detail decimation, watertight enforcement & LookDev render.
         4. Native 3MF generation for Bambu / OrcaSlicer.
         """
+        from tools.multiview_aligner import MultiviewAligner
+        from tools.neural_3d_engine import Neural3DEngine
+        from tools.blender_pipeline import BlenderPipeline
+
         image_path = os.path.abspath(image_path)
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Source image not found: {image_path}")
@@ -170,10 +171,10 @@ class PipelineEngine:
                         if im_w >= 1.25 * im_h:
                             is_multiview = True
                 except Exception as e:
-                    print(f"[PipelineEngine] Note inspecting image: {e}")
+                    print(f"[PipelineEngine] Note inspecting image: {e}", file=sys.stderr)
 
             if is_multiview:
-                print(f"[PipelineEngine] Multi-View turnaround active. Running MultiviewAligner (4 views + CLAHE)...")
+                print("[PipelineEngine] Multi-View turnaround active. Running MultiviewAligner (4 views + CLAHE)...", file=sys.stderr)
                 align_res = MultiviewAligner.split_and_align_multiview(
                     concept_image_path=image_path,
                     output_dir=tmp_dir,
@@ -185,7 +186,7 @@ class PipelineEngine:
                 back_path = align_res["back_path"]
                 clean_path = front_path
             else:
-                print(f"[PipelineEngine] Single hero 3/4 view active. Running clean_and_calibrate_hero_image (rembg + CLAHE + Z=0 ground lock)...")
+                print("[PipelineEngine] Single hero 3/4 view active. Running clean_and_calibrate_hero_image (rembg + CLAHE + Z=0 ground lock)...", file=sys.stderr)
                 MultiviewAligner.clean_and_calibrate_hero_image(
                     image_path=image_path,
                     output_path=clean_path
@@ -193,7 +194,7 @@ class PipelineEngine:
 
             # Neural 3D generation
             clean_title = output_name.replace("_", " ")
-            print(f"[PipelineEngine] Generating neural mesh (octree={params['octree_resolution']}, steps={params['inference_steps']})...")
+            print(f"[PipelineEngine] Generating neural mesh (octree={params['octree_resolution']}, steps={params['inference_steps']})...", file=sys.stderr)
             Neural3DEngine.generate_glb(
                 image_path=clean_path,
                 output_glb_path=raw_glb,
@@ -209,7 +210,7 @@ class PipelineEngine:
             )
 
             # Blender high-fidelity manufacturing
-            print(f"[PipelineEngine] Blender post-processing ({params['target_triangles']:,} triangles)...")
+            print(f"[PipelineEngine] Blender post-processing ({params['target_triangles']:,} triangles)...", file=sys.stderr)
             blender_res = BlenderPipeline.process_and_export(
                 input_glb_path=raw_glb,
                 target_height_mm=target_height_mm,
@@ -253,7 +254,7 @@ class PipelineEngine:
             }
 
             if auto_split:
-                print(f"[PipelineEngine] Auto-Split enabled. Decomposing model into keyed watertight parts...")
+                print("[PipelineEngine] Auto-Split enabled. Decomposing model into keyed watertight parts...", file=sys.stderr)
                 from tools.model_splitter import ModelSplitter
                 split_res = ModelSplitter.split_model(
                     input_mesh_path=stl_path,
@@ -298,16 +299,18 @@ class PipelineEngine:
         target_count: int = 10000
     ) -> Dict[str, Any]:
         """Runs Quadriflow (All-Quad) or Decimate (Triangles) locally in Blender."""
+        from tools.blender_pipeline import BlenderPipeline
+
         target_path = input_mesh_path
         if not target_path or not os.path.exists(target_path):
             st = load_state()
             latest = st.get("latest_model", {})
             target_path = latest.get("glb_path") or latest.get("stl_path")
             if not target_path or not os.path.exists(target_path):
-                glbs = [p for p in OUTPUT_DIR.glob("*.glb") if not p.name.endswith("_raw.glb")]
-                if glbs:
-                    glbs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-                    target_path = str(glbs[0])
+                candidates = [p for p in OUTPUT_DIR.glob("*.glb") if not p.name.endswith("_raw.glb")] + list(OUTPUT_DIR.glob("*.stl"))
+                if candidates:
+                    candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                    target_path = str(candidates[0])
                 else:
                     raise FileNotFoundError("No 3D mesh found to retopologize.")
 
@@ -335,16 +338,18 @@ class PipelineEngine:
         bake_ao: bool = True
     ) -> Dict[str, Any]:
         """Bakes Normal and AO maps locally in Blender Cycles and exports textured GLB."""
+        from tools.blender_pipeline import BlenderPipeline
+
         target_path = input_mesh_path
         if not target_path or not os.path.exists(target_path):
             st = load_state()
             latest = st.get("latest_model", {})
             target_path = latest.get("glb_path") or latest.get("stl_path")
             if not target_path or not os.path.exists(target_path):
-                glbs = [p for p in OUTPUT_DIR.glob("*.glb") if not p.name.endswith("_raw.glb")]
-                if glbs:
-                    glbs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-                    target_path = str(glbs[0])
+                candidates = [p for p in OUTPUT_DIR.glob("*.glb") if not p.name.endswith("_raw.glb")] + list(OUTPUT_DIR.glob("*.stl"))
+                if candidates:
+                    candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                    target_path = str(candidates[0])
                 else:
                     raise FileNotFoundError("No 3D mesh found for PBR texture baking.")
 

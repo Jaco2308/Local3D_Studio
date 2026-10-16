@@ -319,10 +319,10 @@ class HardwareManager:
             mapped_key = TIER_ALIASES.get(forced_tier, forced_tier)
             if mapped_key in TIER_CATALOG:
                 tier = TIER_CATALOG[mapped_key]
-                print(f"[HardwareManager] Manual override active: FORCE_TIER={tier.name}")
+                print(f"[HardwareManager] Manual override active: FORCE_TIER={tier.name}", file=sys.stderr)
                 return tier
             else:
-                print(f"[HardwareManager] Warning: Unknown FORCE_TIER='{forced_tier}'. Falling back to auto-detection.")
+                print(f"[HardwareManager] Warning: Unknown FORCE_TIER='{forced_tier}'. Falling back to auto-detection.", file=sys.stderr)
 
         # 2. Automated Hardware Assessment
         ram_gb = self.memory_info["total_ram_gb"]
