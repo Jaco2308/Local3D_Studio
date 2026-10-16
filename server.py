@@ -696,11 +696,28 @@ def main():
                 target_client = args[i + 1]
         res = run_setup(clients=[target_client], dry_run=dry_run)
         print(json.dumps(res, indent=2))
+    elif args[0] == "update":
+        from core.updater import run_update, check_updates, print_update_report
+        if "--check" in args:
+            chk = check_updates()
+            if "--json" in args:
+                print(json.dumps(chk, indent=2))
+            else:
+                if chk.get("has_update"):
+                    print(f"Update available: local {chk['local_commit']} is {chk['behind_by']} commits behind remote {chk['remote_commit']}.")
+                else:
+                    print(f"Local3D Studio is up to date at commit {chk.get('local_commit', 'HEAD')}.")
+        else:
+            up_res = run_update()
+            if "--json" in args:
+                print(json.dumps(up_res, indent=2))
+            else:
+                print_update_report(up_res)
     elif args[0] in ["status", "hardware"]:
         hw = _get_hw()
         print(hw.get_hardware_badge())
     else:
-        print(f"Unknown command: '{args[0]}'. Available commands: mcp, doctor, setup, status", file=sys.stderr)
+        print(f"Unknown command: '{args[0]}'. Available commands: mcp, doctor, setup, update, status", file=sys.stderr)
         sys.exit(1)
 
 
