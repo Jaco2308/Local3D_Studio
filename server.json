@@ -1,0 +1,30 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.jaco2308/local3d-studio",
+  "title": "Local3D Studio",
+  "description": "16GB-Safe Cross-Platform AI-to-3D Manufacturing & Blender Pipeline MCP Server with Hunyuan3D-2 and automated slicer preparation.",
+  "websiteUrl": "https://github.com/Jaco2308/Local3D_Studio",
+  "repository": {
+    "url": "https://github.com/Jaco2308/Local3D_Studio",
+    "source": "github"
+  },
+  "version": "2.0.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "local3d-studio",
+      "version": "2.0.0",
+      "runtimeHint": "python",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "server.py"
+        }
+      ]
+    }
+  ]
+}

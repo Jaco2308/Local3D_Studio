@@ -15,6 +15,19 @@ import psutil
 from dataclasses import dataclass, asdict
 from typing import Dict, Any, Optional
 
+# Ensure UTF-8 output encoding on Windows consoles
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure") and sys.stdout is not None:
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    if hasattr(sys.stderr, "reconfigure") and sys.stderr is not None:
+        try:
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
 try:
     import torch
 except ImportError:
@@ -159,6 +172,14 @@ class HardwareManager:
                 pass
         elif self.os_type == "Windows":
             try:
+                import winreg
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\CentralProcessor\0") as key:
+                    val, _ = winreg.QueryValueEx(key, "ProcessorNameString")
+                    if val and val.strip():
+                        return val.strip()
+            except Exception:
+                pass
+            try:
                 # Query WMIC or PowerShell
                 res = subprocess.check_output(["wmic", "cpu", "get", "name"], text=True, stderr=subprocess.DEVNULL)
                 lines = [l.strip() for l in res.splitlines() if l.strip() and "name" not in l.lower()]
@@ -288,7 +309,7 @@ class HardwareManager:
         return {
             "device": "cpu",
             "vendor": "cpu",
-            "name": f"Host CPU ({platform.processor() or 'Multicore'})",
+            "name": f"Host CPU ({self.cpu_name})",
             "is_rocm": False,
             "is_unified": False,
             "torch_dtype": "float32",

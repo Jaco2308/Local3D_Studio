@@ -13,6 +13,19 @@ import contextlib
 from pathlib import Path
 from typing import Optional
 
+# Ensure UTF-8 output encoding on Windows consoles
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure") and sys.stdout is not None:
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    if hasattr(sys.stderr, "reconfigure") and sys.stderr is not None:
+        try:
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
 # Ensure project root is in python path
 PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -20,6 +33,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from mcp.server.mcpserver import MCPServer
 from core.config import OUTPUT_DIR
+from core.response_envelope import format_success, format_error
 from tools.pipeline_engine import PipelineEngine, load_state, save_state
 
 # Initialize MCP Server immediately (<50ms boot time for instant MCP stdio handshake)
@@ -661,7 +675,35 @@ def canonicalize_humanoid_pose(
         return json.dumps({"status": "error", "error": str(e)}, indent=2)
 
 
+def main():
+    args = sys.argv[1:]
+    if not args or args[0] == "mcp":
+        print("[Local3D Studio] Starting Universal MCP Server over stdio (Lazy Hardware Init enabled)...", file=sys.stderr)
+        server.run(transport="stdio")
+    elif args[0] == "doctor":
+        from core.diagnostics import run_doctor, print_doctor_report
+        doc = run_doctor()
+        if "--json" in args:
+            print(json.dumps(doc, indent=2))
+        else:
+            print_doctor_report(doc)
+    elif args[0] == "setup":
+        from core.client_setup import run_setup
+        dry_run = "--dry-run" in args
+        target_client = "antigravity"
+        for i, a in enumerate(args):
+            if a == "--client" and i + 1 < len(args):
+                target_client = args[i + 1]
+        res = run_setup(clients=[target_client], dry_run=dry_run)
+        print(json.dumps(res, indent=2))
+    elif args[0] in ["status", "hardware"]:
+        hw = _get_hw()
+        print(hw.get_hardware_badge())
+    else:
+        print(f"Unknown command: '{args[0]}'. Available commands: mcp, doctor, setup, status", file=sys.stderr)
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    print("[Local3D Studio] Starting Universal MCP Server over stdio (Lazy Hardware Init enabled)...", file=sys.stderr)
-    server.run(transport="stdio")
+    main()
 
