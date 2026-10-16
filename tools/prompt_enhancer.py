@@ -7,7 +7,7 @@ props/weapons, vehicles, and generic objects.
 """
 
 import re
-from typing import Optional, List, Dict, Any
+from typing import Optional
 
 
 STYLE_FAITHFUL_ANATOMICAL = "faithful_anatomical"
@@ -100,12 +100,6 @@ def detect_subject_category(text: str) -> str:
         "dolphin", "snake", "serpent", "cobra", "octopus", "squid", "spider", "insect",
         "uccello", "aquila", "falco", "gufo", "pappagallo", "pesce", "squalo",
         "balena", "delfino", "serpente", "vipera", "polpo", "ragno", "insetto"
-    ]
-
-    # Format/style keywords that should NOT force humanoid classification
-    representation_format_keywords = [
-        "figure", "figurine", "statue", "statuetta", "statuina", "chibi",
-        "funko", "toy", "pop", "miniature", "sculpture", "scultura", "model"
     ]
 
     humanoid_keywords = [

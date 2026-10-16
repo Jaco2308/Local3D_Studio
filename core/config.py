@@ -6,6 +6,15 @@ Handles environment variables, global directories, and hardware tiering settings
 import os
 from pathlib import Path
 
+# Fix macOS Python SSL certificate verification for Hugging Face & Gradio
+try:
+    import certifi
+    ca_bundle = certifi.where()
+    os.environ.setdefault("SSL_CERT_FILE", ca_bundle)
+    os.environ.setdefault("REQUESTS_CA_BUNDLE", ca_bundle)
+except ImportError:
+    pass
+
 # Base Paths
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = PROJECT_ROOT / "output"

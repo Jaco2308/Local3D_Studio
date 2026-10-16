@@ -207,7 +207,6 @@ def main():
     log_step("Step 5: Initializing .env configuration...")
     project_root = Path(__file__).resolve().parent
     env_file = project_root / ".env"
-    env_example = project_root / ".env.example"
 
     if not env_file.exists():
         env_content = f"""# Local3D Studio Production Environment Configuration

@@ -16,7 +16,6 @@ import os
 import sys
 import json
 import shutil
-import asyncio
 import tempfile
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -26,10 +25,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 from core.hardware_backend import HardwareManager
@@ -37,7 +36,6 @@ from core.config import OUTPUT_DIR, WORKER_HOST, WORKER_PORT, get_effective_3d_s
 
 from tools.prompt_enhancer import enhance_prompt_for_3d
 from tools.rembg_engine import BackgroundRemovalEngine
-from tools.concept_engine import ConceptEngine
 from tools.neural_3d_engine import Neural3DEngine
 from tools.blender_pipeline import BlenderPipeline
 from frontend.web_viewer import generate_interactive_viewer
@@ -471,7 +469,8 @@ async def api_run_full_pipeline(req: PipelineRequest):
             strategy = (req.generation_strategy or "auto").lower().strip()
             is_multiview = False
             front_path = None
-            side_path = None
+            left_path = None
+            right_path = None
             back_path = None
 
             if strategy == "multiview_turnaround":
@@ -488,7 +487,7 @@ async def api_run_full_pipeline(req: PipelineRequest):
                     print(f"[Worker] Note reading image dimensions: {e}")
 
             if is_multiview:
-                print(f"[Worker] Multi-View turnaround sheet mode active. Running MultiviewAligner (anti-bleed + Y-lock)...")
+                print("[Worker] Multi-View turnaround sheet mode active. Running MultiviewAligner (anti-bleed + Y-lock)...")
                 align_res = MultiviewAligner.split_and_align_multiview(
                     concept_image_path=image_path,
                     output_dir=tmp_dir,

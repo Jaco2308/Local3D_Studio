@@ -160,7 +160,11 @@ class Neural3DEngine:
                     use_safetensors=True,
                 )
                 if hasattr(pipeline, "enable_flashvdm"):
-                    pipeline.enable_flashvdm(enabled=True, mc_algo="mc", replace_vae=False)
+                    if device == "mps":
+                        if hasattr(pipeline.vae, "enable_flashvdm_decoder"):
+                            pipeline.vae.enable_flashvdm_decoder(enabled=False)
+                    else:
+                        pipeline.enable_flashvdm(enabled=True, mc_algo="mc", replace_vae=False)
                 cls._local_pipeline = pipeline
                 return cls._local_pipeline
 
@@ -200,8 +204,15 @@ class Neural3DEngine:
             target_cond_keys = set(conditioner.state_dict().keys())
             remapped_cond = cls._remap_dinov2_conditioner_state_dict(sub_sds["conditioner"], target_cond_keys)
             del sub_sds["conditioner"]
-            conditioner.load_state_dict(remapped_cond, strict=False, assign=True)
+            load_res = conditioner.load_state_dict(remapped_cond, strict=False, assign=True)
             del remapped_cond
+            if load_res.missing_keys:
+                raise RuntimeError(
+                    f"DINOv2 conditioner weights incomplete after remapping "
+                    f"({len(load_res.missing_keys)} missing, e.g. {load_res.missing_keys[:3]})"
+                )
+            if load_res.unexpected_keys:
+                print(f"[Neural3D] Ignored {len(load_res.unexpected_keys)} unexpected conditioner keys.", file=sys.stderr)
             conditioner.to(device=device, dtype=dtype)
             conditioner.eval()
 
@@ -226,7 +237,11 @@ class Neural3DEngine:
                 ),
             )
             if hasattr(pipeline, "enable_flashvdm"):
-                pipeline.enable_flashvdm(enabled=True, mc_algo="mc", replace_vae=False)
+                if device == "mps":
+                    if hasattr(pipeline.vae, "enable_flashvdm_decoder"):
+                        pipeline.vae.enable_flashvdm_decoder(enabled=False)
+                else:
+                    pipeline.enable_flashvdm(enabled=True, mc_algo="mc", replace_vae=False)
 
             print(f"[Neural3D] Local Hunyuan3D-2 ready in {time.time() - t0:.2f}s.", file=sys.stderr)
             cls._local_pipeline = pipeline
@@ -256,11 +271,17 @@ class Neural3DEngine:
         device = str(hw.device_info.get("device", "cpu"))
         is_strict_memory = hw.is_16gb_safe()
 
-        # On Apple Silicon MPS, each full 1.1B DiT CFG step takes ~16s.
-        # Cap local MPS steps & octree so the entire MCP tool finishes well under the IDE SSE timeout (~60s).
+        # Adaptive MPS step & octree scaling based on active preset (fast_draft=4/160, auto=5/192, ultra=6/200)
+        # to ensure inference finishes within ~45-50s without exceeding the IDE stream timeout
         if device == "mps":
-            max_mps_steps = int(os.getenv("LOCAL_MPS_MAX_STEPS", "4"))
-            max_mps_octree = int(os.getenv("LOCAL_MPS_MAX_OCTREE", "256"))
+            if target_steps <= 15:
+                default_mps_steps, default_mps_octree = 4, 160
+            elif target_steps <= 25:
+                default_mps_steps, default_mps_octree = 5, 192
+            else:
+                default_mps_steps, default_mps_octree = 6, 200
+            max_mps_steps = int(os.getenv("LOCAL_MPS_MAX_STEPS", str(default_mps_steps)))
+            max_mps_octree = int(os.getenv("LOCAL_MPS_MAX_OCTREE", str(default_mps_octree)))
             eff_steps = min(target_steps, max_mps_steps)
             eff_octree = min(target_octree, max_mps_octree)
             num_chunks = 32000
@@ -275,15 +296,25 @@ class Neural3DEngine:
             file=sys.stderr
         )
 
+        import numpy as np
+        from hy3dgen.shapegen.pipelines import retrieve_timesteps
+
+        pipeline.set_surface_extractor("mc")
+        do_cfg = True
+        guidance = None
+        if hasattr(pipeline.model, "guidance_embed") and pipeline.model.guidance_embed is True:
+            do_cfg = False
+
         t0 = time.time()
         cond_inputs = pipeline.prepare_image(image_input)
         image_tensor = cond_inputs.pop("image")
         cond = pipeline.encode_cond(
             image=image_tensor,
             additional_cond_inputs=cond_inputs,
-            do_classifier_free_guidance=True,
+            do_classifier_free_guidance=do_cfg,
             dual_guidance=False,
         )
+        batch_size = image_tensor.shape[0]
         del image_tensor
 
         # Immediately release 1.1B DINOv2 conditioner (~2.2 GB) on 16GB unified memory before DiT sampling
@@ -292,22 +323,28 @@ class Neural3DEngine:
             cleanup_memory(label="Post-DINOv2-Conditioner")
 
         generator = torch.Generator(device=pipeline.device).manual_seed(seed)
-        batch_size = cond["main"].shape[0] // 2
+        sigmas = np.linspace(0, 1, eff_steps)
+        timesteps, eff_steps = retrieve_timesteps(
+            pipeline.scheduler,
+            eff_steps,
+            pipeline.device,
+            sigmas=sigmas,
+        )
         latents = pipeline.prepare_latents(batch_size, pipeline.dtype, pipeline.device, generator)
-        timesteps, sigmas = pipeline.get_timesteps(eff_steps)
+        if not do_cfg:
+            guidance = torch.tensor([5.0] * batch_size, device=pipeline.device, dtype=pipeline.dtype)
 
         with torch.no_grad():
             for i, t in enumerate(timesteps):
-                latent_model_input = torch.cat([latents] * 2)
-                t_tensor = torch.tensor([t], device=pipeline.device, dtype=pipeline.dtype) / 1000.0
-                t_expand = t_tensor.expand(latent_model_input.shape[0])
-                noise_pred = pipeline.model(latent_model_input, t_expand, cond)
-                noise_pred_cond, noise_pred_uncond = noise_pred.chunk(2)
-                noise_pred = noise_pred_uncond + 5.0 * (noise_pred_cond - noise_pred_uncond)
-                # Flow-matching Euler step
-                dt = sigmas[i + 1] - sigmas[i]
-                latents = latents + dt * noise_pred
-                del latent_model_input, noise_pred, noise_pred_cond, noise_pred_uncond
+                latent_model_input = torch.cat([latents] * 2) if do_cfg else latents
+                timestep = t.expand(latent_model_input.shape[0]).to(latents.dtype) / pipeline.scheduler.config.num_train_timesteps
+                noise_pred = pipeline.model(latent_model_input, timestep, cond, guidance=guidance)
+                if do_cfg:
+                    noise_pred_cond, noise_pred_uncond = noise_pred.chunk(2)
+                    noise_pred = noise_pred_uncond + 5.0 * (noise_pred_cond - noise_pred_uncond)
+                outputs = pipeline.scheduler.step(noise_pred, t, latents)
+                latents = outputs.prev_sample
+                del latent_model_input, noise_pred, outputs
 
         del cond
 
@@ -317,17 +354,16 @@ class Neural3DEngine:
             cleanup_memory(label="Post-DiT-Sampling")
 
         with torch.no_grad():
-            latents = pipeline.vae.decode(latents)
-            mesh = pipeline.vae.latents2mesh(
+            mesh = pipeline._export(
                 latents,
-                bounds=1.01,
+                output_type="trimesh",
+                box_v=1.01,
                 mc_level=0.0,
-                octree_resolution=eff_octree,
                 num_chunks=num_chunks,
+                octree_resolution=eff_octree,
                 mc_algo="mc",
                 enable_pbar=False,
             )
-            mesh = pipeline._export(mesh, output_type="trimesh", box_v=1.01)
 
         while isinstance(mesh, (list, tuple)):
             mesh = mesh[0]
@@ -344,6 +380,96 @@ class Neural3DEngine:
             cls._local_pipeline = offload_or_cleanup(cls._local_pipeline, label="Hunyuan3D-2")
         cleanup_memory(label="Post-Local-Hunyuan3D")
         return output_glb_path
+
+    @classmethod
+    def _try_gradio_inference(
+        cls,
+        spaces: list,
+        mv_front: Optional[str],
+        mv_left: Optional[str],
+        mv_right: Optional[str],
+        mv_back: Optional[str],
+        clean_img_path: str,
+        caption: str,
+        target_steps: int,
+        target_octree: int,
+        seed: int,
+        output_glb_path: str,
+        timeout: float = 35.0,
+    ) -> Optional[str]:
+        """Attempts fast remote GPU inference across available Hugging Face Spaces."""
+        Client, handle_file = _get_gradio_client()
+        if Client is None:
+            return None
+
+        t0 = time.time()
+        for space_id in spaces:
+            if time.time() - t0 > 45.0:
+                print("[Neural3D] Fast remote budget reached (45s); returning to fallback.", file=sys.stderr)
+                break
+
+            print(f"[Neural3D] Connecting to Space: {space_id} (timeout={timeout}s)...", file=sys.stderr)
+            try:
+                client = Client(
+                    space_id,
+                    token=HF_TOKEN or None,
+                    httpx_kwargs={"timeout": timeout},
+                    verbose=False
+                )
+                print(f"[Neural3D] Submitting inference job to {space_id} (steps={target_steps}, octree={target_octree}, seed={seed})...", file=sys.stderr)
+
+                f_main = handle_file(mv_front if mv_front else clean_img_path)
+                f_left = handle_file(mv_left) if mv_left else None
+                f_right = handle_file(mv_right) if mv_right else None
+                f_back = handle_file(mv_back) if mv_back else None
+
+                if space_id in ["tencent/Hunyuan3D-2mv", "tencent/Hunyuan3D-2"]:
+                    result = client.predict(
+                        caption=caption,
+                        image=f_main,
+                        mv_image_front=f_main if mv_front else None,
+                        mv_image_back=f_back,
+                        mv_image_left=f_left,
+                        mv_image_right=f_right,
+                        steps=target_steps,
+                        guidance_scale=5.5,
+                        seed=seed,
+                        octree_resolution=target_octree,
+                        check_box_rembg=False,
+                        num_chunks=8000,
+                        randomize_seed=True,
+                        api_name="/shape_generation"
+                    )
+                else:  # TripoSG
+                    result = client.predict(
+                        image=f_main,
+                        api_name="/image_to_3d"
+                    )
+
+                downloaded_file = None
+                if isinstance(result, str) and os.path.exists(result):
+                    downloaded_file = result
+                elif isinstance(result, (list, tuple)):
+                    for item in result:
+                        if isinstance(item, str) and item.endswith((".glb", ".obj")):
+                            downloaded_file = item
+                            break
+                        if isinstance(item, dict) and "value" in item and isinstance(item["value"], str):
+                            downloaded_file = item["value"]
+                            break
+
+                if downloaded_file and os.path.exists(downloaded_file):
+                    import shutil
+                    shutil.copyfile(downloaded_file, output_glb_path)
+                    duration = round(time.time() - t0, 2)
+                    print(f"[Neural3D] Success from {space_id} in {duration}s -> {output_glb_path}", file=sys.stderr)
+                    cleanup_memory(label="Post-Neural3D")
+                    return output_glb_path
+
+            except Exception as e:
+                print(f"[Neural3D] Space {space_id} note: {e}", file=sys.stderr)
+
+        return None
 
     @classmethod
     def _slice_multiview_sheet(cls, img_path: str, temp_dir: str) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
@@ -442,7 +568,32 @@ class Neural3DEngine:
                 mv_front = mv_left = mv_right = mv_back = None
                 spaces = ["tencent/Hunyuan3D-2", "tencent/Hunyuan3D-2mv", "VAST-AI/TripoSG"]
 
-            # Step 3: Local Inference with isolated MPS/CUDA memory
+            force_local = os.getenv("FORCE_LOCAL_3D", "0") == "1"
+            prefer_remote = (os.getenv("PREFER_REMOTE_3D", "0") == "1" or target_steps > 15) and not force_local
+
+            # Route A: When high step count is requested (>15 steps) and not forced local,
+            # query fast remote GPU Space first (15-25s) to guarantee high quality without IDE stream timeout.
+            if prefer_remote:
+                print(f"[Neural3D] High quality preset requested ({target_steps} steps). Querying fast remote GPU Space...", file=sys.stderr)
+                remote_res = cls._try_gradio_inference(
+                    spaces=spaces,
+                    mv_front=mv_front,
+                    mv_left=mv_left,
+                    mv_right=mv_right,
+                    mv_back=mv_back,
+                    clean_img_path=clean_img_path,
+                    caption=caption,
+                    target_steps=target_steps,
+                    target_octree=target_octree,
+                    seed=seed,
+                    output_glb_path=output_glb_path,
+                    timeout=35.0
+                )
+                if remote_res:
+                    return remote_res
+                print("[Neural3D] Remote space unavailable or queued; falling back to local MPS inference...", file=sys.stderr)
+
+            # Route B: Local Inference with isolated MPS/CUDA memory
             os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
             cleanup_memory(label="Pre-Hunyuan3D Isolation")
 
@@ -459,84 +610,28 @@ class Neural3DEngine:
                         output_glb_path=output_glb_path
                     )
                 except Exception as local_err:
-                    print(f"[Neural3D] Local inference error ({local_err}); attempting fast Gradio fallback...", file=sys.stderr)
+                    print(f"[Neural3D] Local inference note ({local_err}); attempting fallback...", file=sys.stderr)
                     cls._local_pipeline = None
                     cleanup_memory(label="Failed-Local-Hunyuan3D")
 
-            # Step 4: Fast, Timeout-Bounded Gradio Client Fallback (Hugging Face Spaces)
-            Client, handle_file = _get_gradio_client()
-            if Client is None:
-                raise RuntimeError("Neither local hy3dgen nor gradio_client is available.")
+            # Route C: Fallback to remote GPU Space if not attempted already
+            if not prefer_remote:
+                remote_res = cls._try_gradio_inference(
+                    spaces=spaces,
+                    mv_front=mv_front,
+                    mv_left=mv_left,
+                    mv_right=mv_right,
+                    mv_back=mv_back,
+                    clean_img_path=clean_img_path,
+                    caption=caption,
+                    target_steps=target_steps,
+                    target_octree=target_octree,
+                    seed=seed,
+                    output_glb_path=output_glb_path,
+                    timeout=35.0
+                )
+                if remote_res:
+                    return remote_res
 
-            t0 = time.time()
-            last_error = None
-            for space_id in spaces:
-                if time.time() - t0 > 50.0:
-                    print("[Neural3D] Fast fallback time budget reached (50s); aborting remaining spaces to prevent IDE stream timeout.", file=sys.stderr)
-                    break
-
-                print(f"[Neural3D] Connecting to Space: {space_id} (timeout=45s)...", file=sys.stderr)
-                try:
-                    client = Client(
-                        space_id,
-                        token=HF_TOKEN or None,
-                        httpx_kwargs={"timeout": 45.0},
-                        verbose=False
-                    )
-                    print(f"[Neural3D] Submitting inference job to {space_id} (steps={target_steps}, octree={target_octree}, seed={seed})...", file=sys.stderr)
-
-                    f_main = handle_file(mv_front if mv_front else clean_img_path)
-                    f_left = handle_file(mv_left) if mv_left else None
-                    f_right = handle_file(mv_right) if mv_right else None
-                    f_back = handle_file(mv_back) if mv_back else None
-
-                    if space_id in ["tencent/Hunyuan3D-2mv", "tencent/Hunyuan3D-2"]:
-                        result = client.predict(
-                            caption=caption,
-                            image=f_main,
-                            mv_image_front=f_main if mv_front else None,
-                            mv_image_back=f_back,
-                            mv_image_left=f_left,
-                            mv_image_right=f_right,
-                            steps=target_steps,
-                            guidance_scale=5.5,
-                            seed=seed,
-                            octree_resolution=target_octree,
-                            check_box_rembg=False,
-                            num_chunks=8000,
-                            randomize_seed=True,
-                            api_name="/shape_generation"
-                        )
-                    else:  # TripoSG
-                        result = client.predict(
-                            image=f_main,
-                            api_name="/image_to_3d"
-                        )
-
-                    downloaded_file = None
-                    if isinstance(result, str) and os.path.exists(result):
-                        downloaded_file = result
-                    elif isinstance(result, (list, tuple)):
-                        for item in result:
-                            if isinstance(item, str) and item.endswith((".glb", ".obj")):
-                                downloaded_file = item
-                                break
-                            if isinstance(item, dict) and "value" in item and isinstance(item["value"], str):
-                                downloaded_file = item["value"]
-                                break
-
-                    if downloaded_file and os.path.exists(downloaded_file):
-                        import shutil
-                        shutil.copyfile(downloaded_file, output_glb_path)
-                        duration = round(time.time() - t0, 2)
-                        print(f"[Neural3D] Success from {space_id} in {duration}s -> {output_glb_path}", file=sys.stderr)
-
-                        cleanup_memory(label="Post-Neural3D")
-                        return output_glb_path
-
-                except Exception as e:
-                    print(f"[Neural3D] Space {space_id} failed: {e}", file=sys.stderr)
-                    last_error = e
-
-            raise RuntimeError(f"All 3D neural engines failed. Last error: {last_error}")
+            raise RuntimeError("All 3D neural generation engines failed.")
 

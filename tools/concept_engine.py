@@ -7,7 +7,6 @@ and headless Blender manufacturing, eliminating local memory bottlenecks.
 """
 
 from typing import Optional
-from pathlib import Path
 
 
 class ConceptEngine:

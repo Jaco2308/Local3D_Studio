@@ -10,12 +10,10 @@ Implements:
 3. Image-to-Pose Canonicalization pipeline with Hard Approval Gate integration.
 """
 
-import os
 import sys
-import json
 from pathlib import Path
 from typing import Dict, Any, Optional
-from PIL import Image
+from PIL import Image, ImageDraw
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -23,9 +21,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from core.config import OUTPUT_DIR
 from tools.prompt_enhancer import (
-    CATEGORY_HUMANOID,
-    detect_subject_category,
-    clean_transparency_keywords,
     get_style_directives,
     STYLE_FAITHFUL_ANATOMICAL
 )
@@ -153,7 +148,6 @@ class PoseCanonicalizer:
         canonical_image_path = out_dir / f"{output_filename}_{pose_key}.png"
 
         # Build calibrated canonical preview with angle guidelines and telemetry badge
-        from PIL import Image, ImageDraw, ImageFont
         src_img = Image.open(in_path).convert("RGBA")
         
         # Create 1024x1024 pure white canvas

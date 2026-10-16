@@ -11,11 +11,10 @@ Implements:
 import os
 import sys
 import json
-import shutil
 import tempfile
 import subprocess
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -559,7 +558,6 @@ class ModelSplitter:
 
             # Assembling multi-object 3MF for Bambu Studio / OrcaSlicer via trimesh
             threemf_path = out_dir / f"{output_filename}_split.3mf"
-            has_3mf = False
             try:
                 import trimesh
                 import numpy as np
@@ -604,7 +602,6 @@ class ModelSplitter:
                     data_3mf = multi_scene.export(file_type="3mf")
                     with open(threemf_path, "wb") as f_3mf:
                         f_3mf.write(data_3mf)
-                    has_3mf = True
                     res["multi_color_3mf"] = str(threemf_path)
                     res["multi_color_3mf_uri"] = f"file://{threemf_path}"
             except Exception as e:

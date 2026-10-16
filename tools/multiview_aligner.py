@@ -17,9 +17,9 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import Tuple, Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 from tools.rembg_engine import BackgroundRemovalEngine
 
@@ -73,8 +73,6 @@ class MultiviewAligner:
             return rgba_np
 
         h, w = alpha.shape
-        center_x = w / 2.0
-        center_y = h / 2.0
 
         # Determine dominant component (largest area)
         sizes = [int(np.sum(labeled_array == i)) for i in range(1, num_features + 1)]
@@ -139,11 +137,76 @@ class MultiviewAligner:
         return Image.fromarray(cleaned_np).crop((x_min, y_min, x_max + 1, y_max + 1))
 
     @classmethod
+    def _recover_dark_convex_features(cls, l_channel: np.ndarray, alpha: np.ndarray) -> np.ndarray:
+        """
+        Recovers 3D spherical convexity for glossy black features (e.g., Funko Pop / chibi button eyes,
+        noses, dark gems) that neural 3D conditioners (DINOv2) otherwise misinterpret as deep hollow cavities.
+        Applies a smooth Lambertian hemisphere luminance profile (dark rim -> mid-tone convex dome)
+        using the Euclidean Distance Transform inside compact internal dark regions.
+        """
+        from scipy.ndimage import label, distance_transform_edt, gaussian_filter
+
+        fg_mask = alpha > 128
+        fg_area = int(np.sum(fg_mask))
+        if fg_area < 500:
+            return l_channel
+
+        y_indices = np.where(fg_mask)[0]
+        y_min, y_max = int(y_indices.min()), int(y_indices.max())
+        fg_height = max(y_max - y_min, 1)
+
+        # Identify dark regions inside the foreground silhouette
+        dark_mask = (l_channel < 48) & fg_mask
+        labeled, num_features = label(dark_mask)
+        if num_features == 0:
+            return l_channel
+
+        l_out = l_channel.astype(np.float32).copy()
+        min_feat_area = max(25, int(fg_area * 0.0006))
+        max_feat_area = int(fg_area * 0.045)
+
+        for feat_id in range(1, num_features + 1):
+            comp = (labeled == feat_id)
+            area = int(np.sum(comp))
+            if not (min_feat_area <= area <= max_feat_area):
+                continue
+
+            cy, cx = np.where(comp)
+            mean_y = float(np.mean(cy))
+            # Focus on upper 75% of the figure (head, eyes, nose, chest emblem)
+            if mean_y > y_min + 0.75 * fg_height:
+                continue
+
+            bh = int(cy.max() - cy.min() + 1)
+            bw = int(cx.max() - cx.min() + 1)
+            aspect = max(bh, bw) / float(max(min(bh, bw), 1))
+            if aspect > 2.8:
+                continue  # Skip elongated dark crevices/folds; only boost compact button/dome shapes
+
+            edt = distance_transform_edt(comp)
+            max_dist = float(edt.max())
+            if max_dist < 2.0:
+                continue
+
+            # Normalized radial distance from 0.0 (rim crease) to 1.0 (sphere apex)
+            d_norm = edt / max_dist
+            # Spherical dome normal profile N_z = sqrt(1 - r^2) where r = 1 - d_norm
+            sphere_dome = np.sqrt(np.clip(1.0 - (1.0 - d_norm) ** 2, 0.0, 1.0))
+            dome_smooth = gaussian_filter(sphere_dome, sigma=1.2)
+
+            # Rim stays dark (L~38) for crisp socket crease; apex rises to L~135 so DINOv2 sees a convex sphere
+            target_l = 38.0 + 97.0 * dome_smooth
+            l_out[comp] = np.maximum(l_out[comp], target_l[comp])
+
+        return np.clip(l_out, 0, 255).astype(np.uint8)
+
+    @classmethod
     def enhance_depth_crevices(cls, rgba_pil: Image.Image) -> Image.Image:
         """
         Depth-Crevice Enhancer:
-        Applies CLAHE on L-channel (clipLimit=2.5, tileGridSize=(8,8)) and subtle Unsharp Masking
-        to accentuate contrast in crevices between foreground and background limbs.
+        1. Recovers spherical convexity on dark glossy eyes/noses so they don't become hollow cavities.
+        2. Applies balanced CLAHE on L-channel (clipLimit=1.8, tileGridSize=(8,8)).
+        3. Applies gentle Unsharp Masking without dark halo ringing.
         Preserves alpha transparency 100%.
         """
         import cv2
@@ -155,17 +218,20 @@ class MultiviewAligner:
         lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB)
         l, a, b = cv2.split(lab)
 
-        # CLAHE on L channel
-        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+        # Recover 3D dome shading on compact dark glossy features (eyes, nose)
+        l = cls._recover_dark_convex_features(l, alpha)
+
+        # Balanced CLAHE on L channel
+        clahe = cv2.createCLAHE(clipLimit=1.8, tileGridSize=(8, 8))
         l_clahe = clahe.apply(l)
 
         # Merge and convert back to RGB
         lab_enhanced = cv2.merge((l_clahe, a, b))
         rgb_enhanced = cv2.cvtColor(lab_enhanced, cv2.COLOR_LAB2RGB)
 
-        # Unsharp Mask (radius=2, percent=150)
-        blurred = cv2.GaussianBlur(rgb_enhanced, (0, 0), sigmaX=2.0)
-        unsharp = cv2.addWeighted(rgb_enhanced, 2.5, blurred, -1.5, 0)
+        # Gentle Unsharp Mask (avoids dark ringing halos around eyes)
+        blurred = cv2.GaussianBlur(rgb_enhanced, (0, 0), sigmaX=1.6)
+        unsharp = cv2.addWeighted(rgb_enhanced, 1.35, blurred, -0.35, 0)
         unsharp = np.clip(unsharp, 0, 255).astype(np.uint8)
 
         # Recombine with alpha
@@ -507,8 +573,15 @@ class MultiviewAligner:
         white_canvas = Image.new("RGBA", (target_size, target_size), (255, 255, 255, 255))
         white_canvas.paste(enhanced_crop, (paste_x, paste_y), mask=enhanced_crop)
 
+        alpha_canvas = Image.new("RGBA", (target_size, target_size), (0, 0, 0, 0))
+        alpha_canvas.paste(enhanced_crop, (paste_x, paste_y), mask=enhanced_crop)
+
+        rgb_arr = np.array(white_canvas.convert("RGB"))
+        alpha_arr = np.array(alpha_canvas)[:, :, 3]
+        final_rgba = Image.fromarray(np.dstack((rgb_arr, alpha_arr)), "RGBA")
+
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-        final_rgb = white_canvas.convert("RGB")
-        final_rgb.save(output_path, "PNG")
-        print(f"[MultiviewAligner] Cleaned and calibrated hero image saved to: {output_path} (ground_y={ground_y}, height={new_h}px)", file=sys.stderr)
+        final_rgba.save(output_path, "PNG")
+        print(f"[MultiviewAligner] Cleaned and calibrated RGBA hero image saved to: {output_path} (ground_y={ground_y}, height={new_h}px)", file=sys.stderr)
         return output_path
+

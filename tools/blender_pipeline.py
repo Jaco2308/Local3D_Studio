@@ -13,7 +13,6 @@ any object type (bipeds, quadrupeds, hard-surface props, weapons, vehicles, furn
 import os
 import sys
 import json
-import math
 import tempfile
 import platform
 import subprocess
@@ -247,27 +246,101 @@ if {repr(add_pedestal)}:
         bpy.ops.object.join()
         target_obj = bpy.context.active_object
 
-# 5. Non-Destructive Decimation (Preserving Sharp Sculptural Features)
-curr_tris = sum(len(p.vertices) - 2 for p in target_obj.data.polygons)
+# 5. Anti-Spike Pre-Filter (Removes any flying needle vertices before voxelization)
+def remove_flying_spikes(obj):
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.edges.ensure_lookup_table()
+    bm.verts.ensure_lookup_table()
+    if len(bm.edges) > 100:
+        lengths = sorted(e.calc_length() for e in bm.edges)
+        median_len = max(lengths[len(lengths) // 2], 1e-5)
+        spike_threshold = median_len * 6.0
+        spike_verts = set()
+        for e in bm.edges:
+            if e.calc_length() > spike_threshold:
+                for v in e.verts:
+                    # A flying spike vertex has acute/stretched edges protruding away from neighbors
+                    short_nbrs = [oe.other_vert(v).co for oe in v.link_edges if oe.calc_length() <= spike_threshold]
+                    if not short_nbrs:
+                        spike_verts.add(v)
+                    else:
+                        avg_nbr = sum(short_nbrs, mathutils.Vector((0, 0, 0))) / len(short_nbrs)
+                        if (v.co - avg_nbr).length > median_len * 3.5:
+                            spike_verts.add(v)
+        if spike_verts:
+            bmesh.ops.delete(bm, geom=list(spike_verts), context='VERTS')
+            boundary_edges = [e for e in bm.edges if e.is_boundary]
+            if boundary_edges:
+                bmesh.ops.holes_fill(bm, edges=boundary_edges, sides=0)
+    bm.to_mesh(obj.data)
+    bm.free()
+    obj.data.update()
+
+remove_flying_spikes(target_obj)
+
+# 6. Self-Calibrating OpenVDB Voxel Manifold Remesh (Guarantees 100% Watertight 2-Manifold at Target Triangle Budget)
 target_tri_count = {target_triangles}
+probe_voxel = 0.0050
+rem_probe = target_obj.modifiers.new('ProbeVoxel', 'REMESH')
+rem_probe.mode = 'VOXEL'
+rem_probe.voxel_size = probe_voxel
+rem_probe.adaptivity = 0.0
+depsgraph = bpy.context.evaluated_depsgraph_get()
+eval_obj = target_obj.evaluated_get(depsgraph)
+probe_tris = sum(len(p.vertices) - 2 for p in eval_obj.data.polygons)
+target_obj.modifiers.remove(rem_probe)
 
-if curr_tris > target_tri_count + 1000:
-    dec = target_obj.modifiers.new('PreserveDetailDecimate', 'DECIMATE')
-    dec.decimate_type = 'COLLAPSE'
-    dec.ratio = target_tri_count / float(curr_tris)
-    bpy.ops.object.modifier_apply(modifier=dec.name)
+if probe_tris > 100:
+    calibrated_voxel = probe_voxel * math.sqrt(float(probe_tris) / float(max(target_tri_count, 5000)))
+    calibrated_voxel = max(min(calibrated_voxel, 0.0080), 0.0015)
+else:
+    calibrated_voxel = max(min({voxel_size}, 0.0040), 0.0020)
 
-# 6. Ultra-Gentle Corrective Smoothing
+rem = target_obj.modifiers.new('ManifoldVoxel', 'REMESH')
+rem.mode = 'VOXEL'
+rem.voxel_size = calibrated_voxel
+rem.adaptivity = 0.0
+bpy.ops.object.modifier_apply(modifier=rem.name)
+
+# Keep only the primary manifold shell if voxelization separated any microscopic internal void
+bpy.ops.object.mode_set(mode='EDIT')
+bpy.ops.mesh.select_all(action='SELECT')
+bpy.ops.mesh.separate(type='LOOSE')
+bpy.ops.object.mode_set(mode='OBJECT')
+v_objs = [o for o in bpy.context.scene.objects if o.type == 'MESH']
+main_v = max(v_objs, key=lambda o: len(o.data.vertices))
+for o in v_objs:
+    if o != main_v:
+        bpy.data.objects.remove(o, do_unlink=True)
+bpy.ops.object.select_all(action='DESELECT')
+main_v.select_set(True)
+bpy.context.view_layer.objects.active = main_v
+target_obj = main_v
+
+# 6b. Ultra-Gentle Surface Smoothing on Uniform Manifold Grid (Zero Spike Risk)
 if {smooth_iterations} > 0:
     smooth = target_obj.modifiers.new('CrispSmooth', 'CORRECTIVE_SMOOTH')
     smooth.iterations = min({smooth_iterations}, 2)
-    smooth.factor = min({smooth_factor}, 0.25)
-    smooth.smooth_type = 'LENGTH_WEIGHTED'
+    smooth.factor = min({smooth_factor}, 0.22)
+    smooth.smooth_type = 'SIMPLE'
+    smooth.use_only_smooth = True
     bpy.ops.object.modifier_apply(modifier=smooth.name)
 
-# 7. Final Physical Scaling to Target MM
+# Triangulate quads cleanly for STL/3MF export
+tri_mod = target_obj.modifiers.new('CleanTriangulate', 'TRIANGULATE')
+tri_mod.quad_method = 'BEAUTY'
+tri_mod.ngon_method = 'BEAUTY'
+bpy.ops.object.modifier_apply(modifier=tri_mod.name)
+
+bm_check = bmesh.new()
+bm_check.from_mesh(target_obj.data)
+is_watertight = all(e.is_manifold for e in bm_check.edges)
+bm_check.free()
+
+# 7. Final Physical Scaling to True 1:1 Millimeters (1 STL Unit = 1.0 mm)
 dim_ref = target_obj.dimensions.z if is_upright else max(target_obj.dimensions.x, target_obj.dimensions.y, target_obj.dimensions.z)
-scale_to_mm = ({target_height_mm} / 10.0) / max(dim_ref, 0.001)
+scale_to_mm = ({target_height_mm}) / max(dim_ref, 0.001)
 target_obj.scale *= scale_to_mm
 bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 
@@ -289,9 +362,9 @@ bpy.ops.object.mode_set(mode='OBJECT')
 
 final_tris = sum(len(p.vertices) - 2 for p in target_obj.data.polygons)
 final_verts = len(target_obj.data.vertices)
-dim_x = round(target_obj.dimensions.x * 10.0, 2)
-dim_y = round(target_obj.dimensions.y * 10.0, 2)
-dim_z = round(target_obj.dimensions.z * 10.0, 2)
+dim_x = round(target_obj.dimensions.x, 2)
+dim_y = round(target_obj.dimensions.y, 2)
+dim_z = round(target_obj.dimensions.z, 2)
 
 # Save Telemetry to temp file
 telemetry = {{
@@ -302,7 +375,7 @@ telemetry = {{
         "y": dim_y,
         "z": dim_z
     }},
-    "watertight": True,
+    "watertight": bool(is_watertight),
     "bed_contact_z": 0.0
 }}
 with open({repr(telemetry_json)}, 'w') as f:
@@ -410,15 +483,22 @@ print('[BlenderPipeline] High-fidelity generic post-processing completed.')
             telemetry["performance_tier"] = hw.tier_config.to_dict()
             telemetry["target_triangles_used"] = target_triangles
 
-        # Modern 3MF Slicer Export (Bambu Studio, OrcaSlicer, PrusaSlicer)
+        # Modern 3MF Slicer Export & Final Trimesh Watertight Verification (Bambu Studio, OrcaSlicer, PrusaSlicer)
         has_3mf = False
         try:
             import trimesh
             if os.path.exists(stl_out):
-                mesh_3mf = trimesh.load(stl_out)
+                mesh_3mf = trimesh.load(stl_out, force='mesh')
+                if not mesh_3mf.is_watertight:
+                    trimesh.repair.broken_faces(mesh_3mf)
+                    trimesh.repair.fill_holes(mesh_3mf)
+                    trimesh.repair.fix_winding(mesh_3mf)
+                    trimesh.repair.fix_normals(mesh_3mf)
+                    mesh_3mf.export(stl_out)
+                telemetry["watertight"] = bool(mesh_3mf.is_watertight)
                 mesh_3mf.export(threemf_out)
                 has_3mf = True
-                print(f"[BlenderPipeline] Exported native 3MF model: {threemf_out}", file=sys.stderr)
+                print(f"[BlenderPipeline] Exported native 3MF model: {threemf_out} (watertight={mesh_3mf.is_watertight})", file=sys.stderr)
         except Exception as e:
             print(f"[BlenderPipeline] Note generating 3MF: {e}", file=sys.stderr)
 
