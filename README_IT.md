@@ -6,13 +6,25 @@
 [![Hardware](https://img.shields.io/badge/Hardware-Apple%20Silicon%20|%20AMD%20ROCm%20|%20NVIDIA%20CUDA-purple.svg)](core/hardware_backend.py)
 [![Documentazione](https://img.shields.io/badge/Docs-English-blue.svg)](README.md)
 
+<p align="center">
+  <img src="assets/pipeline_showcase.png" alt="Local3D Studio - Manifattura Locale Image-to-3MF/STL & Taglio con Perni per Stampa 3D" width="100%">
+</p>
+
+<p align="center">
+  <strong>Local Image-to-3MF/STL Manufacturing & Auto-Keyed Splitting for 3D Printing</strong><br>
+  <em>100% Locale • Sicuro su 16GB RAM/VRAM Consumer • Zero Abbonamenti Cloud • Server MCP stdio Nativo</em>
+</p>
+
+---
+
 **Local3D Studio** è una suite di manifattura generativa 3D open-source e server Model Context Protocol (MCP) di livello industriale. Converte prompt testuali e fotografie 2D in figurine 3D a tenuta stagna pronte per la stampa (`.stl`), assemblaggi modulari con perni e giunti di montaggio (`.3mf`) e modelli digitali per videogiochi e animazione (`.glb`).
 
-Progettato come **alternativa 100% locale, aperta e senza abbonamenti a piattaforme cloud come Meshy AI e Tripo3D**, Local3D Studio gira interamente su hardware consumer all'interno di un budget rigido di **16 GB di RAM/VRAM unificata**—senza richiedere flag di compilazione CUDA proprietari o server daemon in background.
+Progettato come **alternativa 100% locale, aperta e senza abbonamenti a piattaforme cloud come Meshy AI e Tripo3D**, Local3D Studio gira interamente su hardware consumer all'interno di un budget rigido di **16 GB di RAM/VRAM unificata**—senza richiedere flag di compilazione CUDA proprietari o server daemon in background. Sfruttando la potenza visiva nativa del client AI (o foto dell'utente) per il 2D, **il 100% dei 16 GB di RAM/VRAM viene dedicato interamente alla ricostruzione neurale 3D (Hunyuan3D-2) e alla manifattura headless in Blender**.
 
 > 🇬🇧 **Read in English**: [README.md](README.md)  
 > 🏛️ **Architettura Tecnica Dettagliata**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)  
-> 🔌 **Guida alla Configurazione dei Client MCP**: [docs/MCP_GUIDE.md](docs/MCP_GUIDE.md)
+> 🔌 **Guida alla Configurazione dei Client MCP**: [docs/MCP_GUIDE.md](docs/MCP_GUIDE.md)  
+> 🌐 **Directory MCP & Community**: [docs/SUBMISSIONS.md](docs/SUBMISSIONS.md)
 
 ---
 
@@ -51,7 +63,7 @@ Elimina le allucinazioni sul retro e le occlusioni tipiche dei modelli a vista s
 
 ### 5. Protocollo di Produzione a 3 Fasi & Hard Approval Gate
 - **Compilatore Prompt (`compile_3d_master_prompt`)**: Genera prompt ultra-dettagliati in stile **Meshy AI Single-Master 3/4** con direttive ferree di anti-occlusione (A-pose, arti staccati, zero fumo, zero auree, zero basette).
-- **Generazione 2D Nativa / Immagine Utente**: Delega la generazione del concept 2D all'assistente AI (es. generatore nativo multimodale Antigravity) o a una foto fornita dall'utente. Elimina il consumo locale di RAM dei modelli di diffusione 2D, azzerando i freeze del sistema su macchine con 16GB di memoria unificata.
+- **Client AI 2D Nativo / Foto Utente (100% RAM Dedicata al 3D)**: Delega interamente la generazione del concept 2D all'assistente AI (es. generatore nativo multimodale Antigravity) o a una foto fornita dall'utente. Eliminando i modelli locali di diffusione 2D, **il 100% dei 16 GB di RAM/VRAM unificata viene dedicato alla ricostruzione 3D (Hunyuan3D-2) e alla manifattura headless Blender**, azzerando i freeze di sistema e massimizzando la densità poligonale.
 - **Hard Approval Gate**: L'esecuzione si arresta tassativamente dopo il salvataggio in `output/<nome>_concept.png`. L'agente mostra l'immagine all'utente e attende esplicita conferma prima di procedere.
 - **Ricostruzione 3D Diretta (`direct_image_to_3d`)**: Pre-elabora l'immagine approvata con rimozione sfondo (`rembg_engine.py`), contrasto locale CLAHE e ancoraggio a $Z=0$, seguiti da ricostruzione neurale isolata e manifattura headless Blender.
 - **Igiene File Temporanei**: Tutti i ritagli intermedi e le mesh grezze risiedono in `tempfile.TemporaryDirectory()`. Solo gli asset finali (`.stl`, `.glb`, `.3mf`, `lookdev_sheet.png`) vengono salvati in `output/`.
@@ -113,8 +125,8 @@ Local3D-Studio/
 ### 1. Installazione
 
 ```bash
-git clone https://github.com/your-username/Local3D-Studio.git
-cd Local3D-Studio
+git clone https://github.com/Jaco2308/Local3D_Studio.git
+cd Local3D_Studio
 
 # Esegui l'installer universale (rileva Apple Silicon, AMD ROCm, NVIDIA CUDA)
 python3 setup_env.py
@@ -123,7 +135,7 @@ python3 setup_env.py
 `setup_env.py` esegue in automatico:
 1. Rileva il sistema operativo e l'acceleratore GPU.
 2. Installa la corretta versione di PyTorch (`mps`, `rocm`, `cuda` o `cpu`).
-3. Installa le librerie necessarie (`mcp`, `diffusers`, `trimesh`, `rembg`, `scipy`, `psutil`, `fastapi`).
+3. Installa le librerie necessarie (`mcp`, `trimesh`, `rembg`, `scipy`, `psutil`, `fastapi`, `transformers`).
 4. Individua autonomamente l'eseguibile di Blender.
 5. Inizializza il file `.env`.
 
@@ -199,6 +211,24 @@ Quando utilizzi `auto_split_model`:
    - Lo slicer chiederà: *"Caricare questi oggetti come un singolo oggetto con parti multiple?"* -> Clicca **Sì**.
    - Assegna gli slot filamento (AMS Slot 1, 2, 3, 4) a ciascuna parte con un solo click.
    - Esegui lo slicing e stampa senza colla di montaggio e senza colorazione a mano!
+
+---
+
+## 🌐 Directory MCP & Ecosistema
+
+Local3D Studio è progettato per integrarsi istantaneamente con qualunque client Model Context Protocol standard:
+
+### Installazione in 1-Click via Smithery.ai
+```bash
+npx -y @smithery/cli install @Jaco2308/Local3D_Studio --client claude
+```
+
+### Registri Ufficiali & Community
+- **Model Context Protocol Servers**: Inviato all'elenco community di [modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers).
+- **Elenco Ufficiale mcpservers.org**: Indicizzato su [mcpservers.org](https://mcpservers.org).
+- **Registro Smithery**: Disponibile su [smithery.ai](https://smithery.ai).
+- **Community Reddit**: Partecipa alle discussioni su [r/mcp](https://reddit.com/r/mcp), [r/BambuLab](https://reddit.com/r/BambuLab) e [r/3Dprinting](https://reddit.com/r/3Dprinting).
+- Modelli e guide di invio dettagliate: [docs/SUBMISSIONS.md](docs/SUBMISSIONS.md).
 
 ---
 

@@ -6,13 +6,25 @@
 [![Hardware](https://img.shields.io/badge/Hardware-Apple%20Silicon%20|%20AMD%20ROCm%20|%20NVIDIA%20CUDA-purple.svg)](core/hardware_backend.py)
 [![Documentation](https://img.shields.io/badge/Docs-Italiano-red.svg)](README_IT.md)
 
+<p align="center">
+  <img src="assets/pipeline_showcase.png" alt="Local3D Studio - Local Image-to-3MF/STL Manufacturing & Auto-Keyed Splitting for 3D Printing" width="100%">
+</p>
+
+<p align="center">
+  <strong>Local Image-to-3MF/STL Manufacturing & Auto-Keyed Splitting for 3D Printing</strong><br>
+  <em>100% Local • Consumer 16GB RAM/VRAM Safe • Zero Cloud Subscriptions • Native stdio MCP Server</em>
+</p>
+
+---
+
 **Local3D Studio** is an open-source, production-grade 3D generative manufacturing suite and Model Context Protocol (MCP) server. It converts raw text prompts and 2D photos into high-definition, watertight 3D-printable figurines (`.stl`), modular keyed assemblies (`.3mf`), and game-ready digital assets (`.glb`).
 
-Designed as a **100% local-first, zero-cloud alternative to platforms like Meshy AI and Tripo3D**, Local3D Studio executes entirely on consumer hardware within a strict **16 GB unified RAM/VRAM budget**—without requiring proprietary CUDA compilation flags or mandatory background daemon servers.
+Designed as a **100% local-first, zero-cloud alternative to platforms like Meshy AI and Tripo3D**, Local3D Studio executes entirely on consumer hardware within a strict **16 GB unified RAM/VRAM budget**—without requiring proprietary CUDA compilation flags or mandatory background daemon servers. By using the client AI's native visual generator (or user-provided photos) for 2D concepts, **100% of your 16 GB of RAM/VRAM is dedicated exclusively to 3D neural reconstruction (Hunyuan3D-2) and headless Blender manufacturing**.
 
 > 📖 **Read in Italian / Leggi in Italiano**: [README_IT.md](README_IT.md)  
 > 🏛️ **Architecture Deep-Dive**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)  
-> 🔌 **MCP Client Setup Guide**: [docs/MCP_GUIDE.md](docs/MCP_GUIDE.md)
+> 🔌 **MCP Client Setup Guide**: [docs/MCP_GUIDE.md](docs/MCP_GUIDE.md)  
+> 🌐 **MCP Directories & Community**: [docs/SUBMISSIONS.md](docs/SUBMISSIONS.md)
 
 ---
 
@@ -51,7 +63,7 @@ Eliminates rear-side hallucinations and occlusion:
 
 ### 5. Production 3-Step Protocol & Hard Approval Gate
 - **Prompt Compiler (`compile_3d_master_prompt`)**: Generates an ultra-detailed, photogrammetry-grade prompt in the **Meshy AI Single-Master 3/4** profile with strict anti-occlusion directives (A-pose, separated limbs, zero smoke, zero auras, zero pedestals).
-- **Native 2D Generation / User Image**: Decouples 2D generation to the client assistant (e.g. Antigravity's native multimodal generator) or a user-provided photo. Eliminates local 2D diffusion memory consumption, completely avoiding system freezes on 16GB unified RAM.
+- **Native Client AI 2D / User Photo (100% RAM Dedicated to 3D)**: Fully decouples 2D concept generation to the client AI assistant (e.g. Antigravity's native multimodal generator) or user-supplied reference photos. By eliminating local 2D diffusion pipelines, **100% of the 16 GB unified RAM/VRAM budget is dedicated to 3D neural reconstruction (Hunyuan3D-2) and headless Blender manufacturing**, completely avoiding system freezes and maximizing polygon fidelity.
 - **Hard Approval Gate**: Execution strictly pauses after saving `output/<name>_concept.png`. The agent must display the concept and wait for explicit user confirmation before proceeding.
 - **Direct 3D Reconstruction (`direct_image_to_3d`)**: Preprocesses the approved image with background removal (`rembg_engine.py`), CLAHE local contrast, and $Z=0$ ground lock, followed by isolated neural 3D reconstruction and headless Blender manufacturing.
 - **Tempfile Hygiene**: Intermediate texture slices, masks, and raw neural meshes are kept inside `tempfile.TemporaryDirectory()`. Only the final `.stl`, `.glb`, `.3mf`, and `lookdev_sheet.png` are written to `output/`.
@@ -113,8 +125,8 @@ Local3D-Studio/
 ### 1. Installation
 
 ```bash
-git clone https://github.com/your-username/Local3D-Studio.git
-cd Local3D-Studio
+git clone https://github.com/Jaco2308/Local3D_Studio.git
+cd Local3D_Studio
 
 # Run the universal installer (auto-detects Apple Silicon, AMD ROCm, NVIDIA CUDA)
 python3 setup_env.py
@@ -123,7 +135,7 @@ python3 setup_env.py
 `setup_env.py` automatically:
 1. Detects your OS and GPU accelerator.
 2. Installs the matching PyTorch wheels (`mps`, `rocm`, `cuda`, or `cpu`).
-3. Installs requirements (`mcp`, `diffusers`, `trimesh`, `rembg`, `scipy`, `psutil`, `fastapi`).
+3. Installs requirements (`mcp`, `trimesh`, `rembg`, `scipy`, `psutil`, `fastapi`, `transformers`).
 4. Autonomously locates your Blender installation.
 5. Initializes your `.env` configuration file.
 
@@ -199,6 +211,24 @@ When using `auto_split_model`:
    - The slicer will ask: *"Load these objects as a single object with multiple parts?"* -> Click **Yes**.
    - Assign filament slots (AMS Slot 1, 2, 3, 4) to each part in one click.
    - Slice and print without assembly glue or manual painting!
+
+---
+
+## 🌐 MCP Directories & Ecosystem
+
+Local3D Studio is built to seamlessly integrate with any standard Model Context Protocol client:
+
+### 1-Click Install via Smithery.ai
+```bash
+npx -y @smithery/cli install @Jaco2308/Local3D_Studio --client claude
+```
+
+### Official Registries & Communities
+- **Model Context Protocol Servers**: Submitted to [modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers) community listings.
+- **MCP Servers Directory**: Indexed on [mcpservers.org](https://mcpservers.org).
+- **Smithery Registry**: Live on [smithery.ai](https://smithery.ai).
+- **Reddit Communities**: Join discussions on [r/mcp](https://reddit.com/r/mcp), [r/BambuLab](https://reddit.com/r/BambuLab), and [r/3Dprinting](https://reddit.com/r/3Dprinting).
+- Complete launch guides and directory PR templates: [docs/SUBMISSIONS.md](docs/SUBMISSIONS.md).
 
 ---
 

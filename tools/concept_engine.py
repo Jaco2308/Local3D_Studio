@@ -1,8 +1,9 @@
 """
-Local3D Studio Concept Engine (Antigravity Native Mode)
-2D concept generation is now delegated directly to Antigravity's native multimodal
-image generator or user-provided reference photos, eliminating local SDXL diffusion
-memory overhead on Apple Silicon unified RAM.
+Local3D Studio Concept Engine (Client AI Native Mode)
+2D concept generation is delegated directly to the client AI assistant's native
+multimodal visual generator or user-provided reference photos. This dedicates
+100% of the 16 GB RAM/VRAM budget to 3D neural reconstruction (Hunyuan3D-2)
+and headless Blender manufacturing, eliminating local memory bottlenecks.
 """
 
 from typing import Optional
@@ -18,11 +19,12 @@ class ConceptEngine:
         **kwargs
     ) -> str:
         """
-        Stub informing that 2D concept generation is handled natively by Antigravity
+        Stub informing that 2D concept generation is handled natively by the AI client
         or user-provided reference images.
         """
         raise NotImplementedError(
-            "2D image generation with SDXL-Lightning has been disabled to eliminate Mac freeze. "
-            "Use 'compile_3d_master_prompt' to obtain the master prompt, generate the image using "
-            "Antigravity's native image generator or provide your own reference image, then call 'direct_image_to_3d'."
+            "2D image generation is handled directly by your client AI assistant (e.g. Antigravity native generator) "
+            "or user-provided reference images, dedicating 100% of the 16 GB RAM/VRAM budget to Hunyuan3D-2 3D reconstruction. "
+            "Use 'compile_3d_master_prompt' to obtain the photogrammetry-grade prompt, generate or supply your image, "
+            "then call 'direct_image_to_3d'."
         )

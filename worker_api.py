@@ -869,7 +869,7 @@ def api_enhance_prompt(req: PromptRequest):
 def api_generate_concept(req: ConceptRequest):
     return {
         "status": "info",
-        "message": "Local 2D concept generation with SDXL-Lightning has been deactivated to eliminate memory bottlenecks and freezes. Please generate your 2D concept using Antigravity native generator or upload your image directly at /api/v1/upload-image.",
+        "message": "Local 2D concept generation has been decoupled to the AI client visual generator or direct image upload, dedicating 100% of system RAM/VRAM to 3D neural reconstruction and manufacturing.",
         "recommended_flow": "Use compile_3d_master_prompt -> Native 2D concept -> direct_image_to_3d"
     }
 

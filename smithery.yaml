@@ -1,0 +1,28 @@
+# Smithery configuration for Local3D Studio
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      forceTier:
+        type: string
+        title: Performance Tier Override
+        description: Force specific hardware tier (TIER_1_ECO, TIER_2_BALANCED, TIER_3_PRO_64GB, TIER_4_ULTRA, or AUTO)
+        default: AUTO
+      blenderPath:
+        type: string
+        title: Blender Binary Path
+        description: Optional custom path to Blender executable. If left empty, Local3D Studio auto-detects it.
+        default: ""
+  commandFunction: |-
+    (config) => ({
+      command: 'python',
+      args: ['server.py'],
+      env: {
+        FORCE_TIER: config.forceTier || 'AUTO',
+        BLENDER_PATH: config.blenderPath || ''
+      }
+    })
+  exampleConfig:
+    forceTier: "AUTO"
+    blenderPath: ""

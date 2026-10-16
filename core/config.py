@@ -41,11 +41,6 @@ HF_TOKEN = os.getenv("HF_TOKEN", "")
 # Hardware Tiering Settings
 FORCE_TIER = os.getenv("FORCE_TIER", "AUTO").upper()
 
-# Concept 2D Model Settings
-SDXL_MODEL_ID = os.getenv("SDXL_MODEL_ID", "stabilityai/stable-diffusion-xl-base-1.0")
-SDXL_LIGHTNING_REPO = os.getenv("SDXL_LIGHTNING_REPO", "ByteDance/SDXL-Lightning")
-SDXL_LIGHTNING_CKPT = os.getenv("SDXL_LIGHTNING_CKPT", "sdxl_lightning_4step_unet.safetensors")
-
 # Overrides (if set by user; otherwise dynamically resolved by HardwareManager tier)
 MODEL_TIER = os.getenv("MODEL_TIER", "").lower()
 MEMORY_MODE = os.getenv("MEMORY_MODE", "AUTO").upper()

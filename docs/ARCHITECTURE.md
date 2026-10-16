@@ -137,7 +137,7 @@ To guarantee zero system freezes and prevent heavy memory swap on 16GB unified R
  
 2. **Concept 2D Generation & Hard Approval Gate**:
    - High-resolution 2D concepts are generated directly via the client AI assistant (e.g. Antigravity's native multimodal generator) or provided by the user.
-   - This eliminates the heavy RAM footprint of loading local 2D diffusion pipelines (`SDXL-Lightning`) into unified memory, preserving the full 16GB RAM budget for 3D reconstruction.
+   - This eliminates the heavy RAM footprint of loading local 2D diffusion pipelines into unified memory, dedicating 100% of the 16GB RAM budget to 3D neural reconstruction (Hunyuan3D-2) and headless Blender manufacturing.
    - The generated concept is saved to `output/<name>_concept.png` and presented to the user. Execution strictly pauses until explicit user approval is granted.
  
 3. **Neural 3D Reconstruction & Manufacturing (`direct_image_to_3d`)**:

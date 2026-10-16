@@ -152,68 +152,48 @@ class PoseCanonicalizer:
 
         canonical_image_path = out_dir / f"{output_filename}_{pose_key}.png"
 
-        # Check if full local SDXL-Lightning generation is explicitly enabled via environment
-        generated = False
-        if os.environ.get("LOCAL3D_ENABLE_SDXL") == "1" or os.environ.get("FRANCOPOP_ENABLE_SDXL") == "1":
-            try:
-                from tools.concept_engine import ConceptEngine
-                print(f"[PoseCanonicalizer] Generating canonical {pose_key} concept using local ConceptEngine...")
-                ConceptEngine.generate_concept(
-                    user_prompt=repose_prompt,
-                    output_path=str(canonical_image_path),
-                    mode="3d_print",
-                    art_style=art_style,
-                    multiview=False,
-                    add_pedestal_base=False
-                )
-                generated = True
-            except Exception as ex:
-                print(f"[PoseCanonicalizer] Local SDXL-Lightning note: {ex}. Packaging canonical re-pose specification...")
-
-        if not generated or not canonical_image_path.exists():
-            # Build calibrated canonical preview with angle guidelines and telemetry badge
-            from PIL import Image, ImageDraw, ImageFont
-            src_img = Image.open(in_path).convert("RGBA")
-            
-            # Create 1024x1024 pure white canvas
-            canvas = Image.new("RGBA", (1024, 1024), (255, 255, 255, 255))
-            
-            # Scale and center source character
-            w, h = src_img.size
-            scale = min(820.0 / float(w), 820.0 / float(h))
-            new_w = int(w * scale)
-            new_h = int(h * scale)
-            resized = src_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            
-            offset_x = (1024 - new_w) // 2
-            offset_y = (1024 - new_h) // 2
-            canvas.paste(resized, (offset_x, offset_y), resized if resized.mode == 'RGBA' else None)
-            
-            # Draw subtle canonical alignment guidelines
-            draw = ImageDraw.Draw(canvas)
-            center_x = 512
-            neck_y = 280
-            
-            # Subtle guidelines for pose reference
-            if pose_key == POSE_T:
-                # 90-degree horizontal guideline
-                draw.line([(80, neck_y), (944, neck_y)], fill=(0, 180, 220, 140), width=3)
-            elif pose_key == POSE_A:
-                # 35-45 degree downward arm guidelines
-                draw.line([(center_x, neck_y), (140, neck_y + 360)], fill=(0, 200, 140, 140), width=3)
-                draw.line([(center_x, neck_y), (884, neck_y + 360)], fill=(0, 200, 140, 140), width=3)
-            
-            # Ground plane line
-            draw.line([(100, 920), (924, 920)], fill=(200, 200, 200, 180), width=2)
-            
-            # Header telemetry label
-            pose_label = SUPPORTED_POSES[pose_key]["name"].upper()
-            draw.rectangle([(24, 24), (480, 72)], fill=(245, 248, 250, 240), outline=(200, 210, 220, 255), width=2)
-            draw.text((36, 36), f"Local3D Pose Guidance: {pose_label}", fill=(30, 45, 60, 255))
-            
-            # Convert to RGB and save
-            rgb_canvas = canvas.convert("RGB")
-            rgb_canvas.save(canonical_image_path, quality=95)
+        # Build calibrated canonical preview with angle guidelines and telemetry badge
+        from PIL import Image, ImageDraw, ImageFont
+        src_img = Image.open(in_path).convert("RGBA")
+        
+        # Create 1024x1024 pure white canvas
+        canvas = Image.new("RGBA", (1024, 1024), (255, 255, 255, 255))
+        
+        # Scale and center source character
+        w, h = src_img.size
+        scale = min(820.0 / float(w), 820.0 / float(h))
+        new_h = int(h * scale)
+        resized = src_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        
+        offset_x = (1024 - new_w) // 2
+        offset_y = (1024 - new_h) // 2
+        canvas.paste(resized, (offset_x, offset_y), resized if resized.mode == 'RGBA' else None)
+        
+        # Draw subtle canonical alignment guidelines
+        draw = ImageDraw.Draw(canvas)
+        center_x = 512
+        neck_y = 280
+        
+        # Subtle guidelines for pose reference
+        if pose_key == POSE_T:
+            # 90-degree horizontal guideline
+            draw.line([(80, neck_y), (944, neck_y)], fill=(0, 180, 220, 140), width=3)
+        elif pose_key == POSE_A:
+            # 35-45 degree downward arm guidelines
+            draw.line([(center_x, neck_y), (140, neck_y + 360)], fill=(0, 200, 140, 140), width=3)
+            draw.line([(center_x, neck_y), (884, neck_y + 360)], fill=(0, 200, 140, 140), width=3)
+        
+        # Ground plane line
+        draw.line([(100, 920), (924, 920)], fill=(200, 200, 200, 180), width=2)
+        
+        # Header telemetry label
+        pose_label = SUPPORTED_POSES[pose_key]["name"].upper()
+        draw.rectangle([(24, 24), (480, 72)], fill=(245, 248, 250, 240), outline=(200, 210, 220, 255), width=2)
+        draw.text((36, 36), f"Local3D Pose Guidance: {pose_label}", fill=(30, 45, 60, 255))
+        
+        # Convert to RGB and save
+        rgb_canvas = canvas.convert("RGB")
+        rgb_canvas.save(canonical_image_path, quality=95)
 
         # Update Hard Approval Gate state
         from tools.pipeline_engine import load_state, save_state
