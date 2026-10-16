@@ -48,6 +48,54 @@ def get_server_registration_entry() -> Dict[str, Any]:
     }
 
 
+def install_global_cli_shim() -> bool:
+    """Installs a global 'local3d' CLI shim into user's PATH directories."""
+    is_win = sys.platform == "win32"
+    home = Path.home()
+    installed = False
+
+    if is_win:
+        venv_python = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
+        python_cmd = str(venv_python) if venv_python.exists() else sys.executable
+        server_script = str(PROJECT_ROOT / "server.py")
+        cmd_content = f'@echo off\n@"{python_cmd}" "{server_script}" %*\n'
+
+        target_dirs = [
+            home / "AppData" / "Local" / "Python" / "bin",
+            home / ".gemini" / "antigravity" / "bin",
+            home / "AppData" / "Local" / "Microsoft" / "WindowsApps",
+        ]
+        for tdir in target_dirs:
+            if tdir.exists():
+                try:
+                    (tdir / "local3d.cmd").write_text(cmd_content, encoding="utf-8")
+                    installed = True
+                except Exception:
+                    pass
+    else:
+        venv_python = PROJECT_ROOT / ".venv" / "bin" / "python3"
+        python_cmd = str(venv_python) if venv_python.exists() else sys.executable
+        server_script = str(PROJECT_ROOT / "server.py")
+        sh_content = f'#!/usr/bin/env bash\nexec "{python_cmd}" "{server_script}" "$@"\n'
+
+        target_dirs = [
+            home / ".local" / "bin",
+            home / "bin",
+            Path("/usr/local/bin")
+        ]
+        for tdir in target_dirs:
+            if tdir.exists():
+                try:
+                    target_file = tdir / "local3d"
+                    target_file.write_text(sh_content, encoding="utf-8")
+                    target_file.chmod(0o755)
+                    installed = True
+                except Exception:
+                    pass
+
+    return installed
+
+
 def install_antigravity_skill() -> bool:
     """Installs the bundled local3d-studio skill into Antigravity global skills directory."""
     src_dir = PROJECT_ROOT / "skills" / "local3d-studio"
@@ -155,14 +203,21 @@ def run_setup(clients: Optional[List[str]] = None, dry_run: bool = False) -> Lis
         res = setup_client(cid, dry_run=dry_run)
         results.append(res)
 
-    # Also install skill
+    # Also install skill and global CLI shim
     if not dry_run:
-        skill_res = install_antigravity_skill()
+        skill_ok = install_antigravity_skill()
         results.append({
             "client": "skill_bundle",
-            "ok": skill_res,
-            "status": "installed" if skill_res else "failed",
+            "ok": skill_ok,
+            "status": "installed" if skill_ok else "failed",
             "message": "Antigravity skill bundle installed at ~/.gemini/config/skills/local3d-studio"
+        })
+        cli_ok = install_global_cli_shim()
+        results.append({
+            "client": "global_cli",
+            "ok": cli_ok,
+            "status": "installed" if cli_ok else "failed",
+            "message": "Global 'local3d' command installed into system PATH."
         })
 
     return results
