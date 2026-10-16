@@ -10,17 +10,22 @@ Local3D Studio is engineered from the ground up as a **100% local, cross-platfor
 flowchart TD
     subgraph Client ["MCP Clients & Interfaces"]
         AGY["Antigravity / Claude Desktop / Cursor (stdio MCP)"]
+        CLI["Universal CLI (local3d doctor / update / setup / mcp)"]
         WEB["Optional Web Studio (Three.js WebGL GUI)"]
     end
 
     subgraph MCP ["Local3D Studio Universal MCP Server (server.py)"]
         Router["15 Native MCP Tools"]
         Gate["Hard Approval Gate (.state_gate.json)"]
+        Schema["server.json MCP Catalog Standard"]
     end
 
-    subgraph Core ["Hardware & Memory Layer (core/)"]
+    subgraph Core ["Hardware, Diagnostics & Lifecycle Layer (core/)"]
         HWM["HardwareManager (hardware_backend.py)"]
-        Tier["Dynamic Tiering (TIER 1 Eco to TIER 4 Ultra)"]
+        Diag["Diagnostics & Doctor (diagnostics.py)"]
+        Setup["Client Setup & Backups (client_setup.py)"]
+        Upd["Self-Updater Engine (updater.py)"]
+        Env["Envelope Protocol (response_envelope.py)"]
         Mem["Memory Manager (memory.py)"]
     end
 
@@ -42,6 +47,7 @@ flowchart TD
         LKD["4-View LookDev & Exploded Sheet"]
     end
 
+    CLI --> Core
     AGY --> Router
     WEB --> Router
     Router --> Gate
@@ -144,4 +150,76 @@ To guarantee zero system freezes and prevent heavy memory swap on 16GB unified R
    - Once approved, the image is automatically preprocessed via `rembg_engine.py` (with connected-component filtering to strip loose artifacts), CLAHE local contrast enhancement, and bounding-box grounding to $Z=0$ ($Y=456$).
    - Neural 3D reconstruction runs in an isolated environment (`PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0` with aggressive memory purges before and after inference).
    - Headless Blender (`bpy`) processes the raw mesh with `separate(type='LOOSE')` to isolate the primary shell, performs non-destructive polygon decimation, and exports production deliverables (`.stl`, `.glb`, `.3mf`, and `lookdev_sheet.png`).
+
+---
+
+## 7. Deep Diagnostic Engine & System Doctor (`core/diagnostics.py`)
+
+Local3D Studio includes an automated health diagnostic system invoked via `local3d doctor` or programmatically via MCP:
+
+- **Host Runtime & Isolation**: Validates Python $\ge 3.10$, virtual environment activation, and UTF-8 console encoding (preventing Windows `cp1252` encoding exceptions).
+- **Hardware Telemetry & Acceleration**:
+  - Physical RAM and available memory headroom inspection.
+  - CPU model identification (utilizing Windows Registry `HARDWARE\DESCRIPTION\System\CentralProcessor\0`, macOS `sysctl`, or Linux `/proc/cpuinfo` to avoid deprecated WMI utilities).
+  - Neural accelerator probing: CUDA (with compute capability), DirectML (`torch-directml`), Apple Silicon MPS, or ROCm HIP.
+- **Blender Headless Verification**:
+  - Resolves active `BLENDER_PATH` from `.env` or auto-scans system directories.
+  - Spawns a background subprocess executing `blender --background --version` to ensure non-blocking headless execution.
+- **MCP Client Configuration Drift**:
+  - Inspects known client configuration locations (Google Antigravity, Claude Desktop, Cursor, VS Code).
+  - Reports whether the `local3d` server is registered, verifies python binary paths, and flags missing environment flags (`PYTHONUNBUFFERED=1`).
+
+---
+
+## 8. Multi-Client Atomic Auto-Setup (`core/client_setup.py`)
+
+To eliminate error-prone manual JSON editing across diverse operating systems and clients, `Local3D Studio` provides atomic client configuration:
+
+- **Safe JSON Patching**: Reads existing client settings, verifies JSON integrity, creates a timestamped recovery backup (`.local3d.backup`), and updates the `mcpServers.local3d` stanza without disturbing other server entries.
+- **Antigravity Skill Provisioning**: Automatically deploys the `local3d-studio` agent skill (`SKILL.md` and reference documentation) into `~/.gemini/config/skills/local3d-studio/`, enabling agent awareness of 3D manufacturing protocols.
+- **Cross-Platform CLI Shimming**:
+  - Generates `local3d.cmd` on Windows (targeting user `PATH` directories like `AppData\Local\Python\bin` and `.gemini\antigravity\bin`).
+  - Generates executable POSIX shell wrappers on macOS and Linux.
+
+---
+
+## 9. Automated Lifecycle & Self-Updating Engine (`core/updater.py`)
+
+Modeled after production reverse-engineering and developer tools (such as REA), `local3d update` provides one-click lifecycle management:
+
+- **Git Remote Synchronization**: Queries `git fetch` and evaluates ahead/behind revision deltas against `origin/main`.
+- **Dependency Drift Resolution**: Automatically runs `pip install -r requirements.txt` within the dedicated virtual environment upon detecting remote changes.
+- **Skill Synchronization**: Refreshes global AI agent skill definitions to match any prompt engineering or API improvements in the repository.
+- **Post-Update Self-Check**: Automatically triggers `local3d doctor` following updates to ensure all runtime dependencies and system bridges remain operational.
+- **One-Click Native Wrappers**: Packaged with `update.bat` (Windows) and `update.sh` (macOS/Linux) for immediate desktop execution without opening a shell.
+
+---
+
+## 10. Standardized Envelope Contracts & Catalog Specification
+
+### Normalized Response Envelope (`core/response_envelope.py`)
+All MCP tool calls and internal procedures communicate through a strict, normalized contract:
+
+```json
+{
+  "success": true,
+  "code": "OK",
+  "data": { ... },
+  "remediation": null,
+  "metadata": {
+    "timestamp": "2026-10-16T18:30:00Z",
+    "version": "1.0.0"
+  }
+}
+```
+
+In the event of an operational failure (e.g. missing Blender executable, insufficient VRAM, or unapproved 2D concept), the server returns `success: false` accompanied by actionable `remediation` directives:
+- Pinpoints the root cause.
+- Supplies the exact command or setting to fix it (e.g., `local3d setup`, setting `BLENDER_PATH`, or calling `confirm_concept_and_build_3d`).
+
+### MCP Catalog Specification (`server.json`)
+Conforms to the official Model Context Protocol server catalog schema (2025-12-11):
+- Declares standard `stdio` transport parameters.
+- Lists server capabilities, author metadata, environment configurations, and documentation references.
+
 

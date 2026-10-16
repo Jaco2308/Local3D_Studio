@@ -6,18 +6,36 @@ Local3D Studio's MCP server executes **100% locally in-process over standard I/O
 
 ---
 
-## 🚀 Quick Setup Overview
+## 🚀 Automated 1-Command Setup (Recommended)
 
-The MCP server entrypoint is:
-- **Server Name**: `Local3D-Studio`
-- **Recommended MCP Key**: `local3d`
-- **Executable**: `python server.py` (or `./run_mcp.sh` on macOS/Linux, `run_mcp.bat` on Windows)
-- **Transport**: `stdio`
-- **Environment**: Your Python virtual environment (`.venv`) where dependencies were installed via `setup_env.py`.
+Thanks to the REA-inspired client configuration subsystem, you can register Local3D Studio automatically in your desired client:
+
+```bash
+# Register in Google Antigravity & deploy skill
+local3d setup --client antigravity
+
+# Register in Claude Desktop
+local3d setup --client claude_desktop
+
+# Register in Cursor IDE
+local3d setup --client cursor
+
+# Register in VS Code
+local3d setup --client vscode
+
+# Verify connection health, Blender detection, and configuration drift
+local3d doctor
+```
+
+`local3d setup` automatically:
+1. Detects your client configuration path.
+2. Creates an atomic backup (`.local3d.backup`).
+3. Inserts the `local3d` MCP server without modifying or disturbing existing servers.
+4. Installs the official **Antigravity Skill** into `~/.gemini/config/skills/local3d-studio/`.
 
 ---
 
-## 💻 Client Configuration Snippets
+## 💻 Manual Client Configuration Snippets
 
 ### 1. Google Antigravity / Gemini CLI
 

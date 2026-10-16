@@ -82,17 +82,28 @@ Local3D-Studio/
 ├── README_IT.md                     # Italian Master Documentation
 ├── requirements.txt                 # Universal dependencies (zero C++ build flags)
 ├── setup_env.py                     # Universal installer & hardware bootstrapper
+├── server.json                      # Official MCP Catalog Specification Manifest
 ├── run_mcp.sh / .bat                # In-process stdio MCP server launchers
+├── update.sh / .bat                 # One-click automated updater scripts
 ├── start_worker.sh / .bat           # Optional Web Studio GUI launchers
-├── server.py                        # Root MCP Server (15 Native Tools)
+├── server.py                        # Root MCP Server & Unified CLI (15 Native Tools)
 ├── worker_api.py                    # Optional FastAPI Web Studio & Three.js server
 │
-├── core/                            # Hardware abstraction & memory tiering layer
+├── core/                            # Hardware abstraction, diagnostics & client layer
 │   ├── __init__.py
 │   ├── config.py                    # Environment variables & directory paths
 │   ├── hardware_backend.py          # HardwareManager (MPS / ROCm / CUDA / 4 Tiers)
+│   ├── diagnostics.py               # Local3D Doctor diagnostic & health inspection
+│   ├── client_setup.py              # Automated multi-client setup & skill deployment
+│   ├── updater.py                   # Automated GitHub release pull & dependency sync
+│   ├── response_envelope.py         # Standardized MCP result and error contracts
 │   ├── memory.py                    # VRAM/RAM garbage collector & cache cleaner
 │   └── client.py                    # Unified REST client (optional LAN offload)
+│
+├── skills/                          # Bundled AI Agent Skills
+│   └── local3d-studio/
+│       ├── SKILL.md                 # Production 3-Step Protocol for Antigravity
+│       └── references/              # Slicer & hardware tier reference guides
 │
 ├── tools/                           # Modular Generative & Manufacturing Engines
 │   ├── __init__.py
@@ -141,11 +152,43 @@ python3 setup_env.py
 
 ---
 
-### 2. Connecting to Your MCP Client
+### 2. Universal `local3d` CLI Suite
+
+Inspired by the REA architecture, Local3D Studio provides a system-wide unified CLI command (`local3d`):
+
+```bash
+# 1. Automated Health Diagnostics (Blender, PyTorch, Memory Tiers, MCP Client drift)
+local3d doctor
+
+# 2. Automated 1-Click Update (GitHub release sync, pip dependencies, skill refresh)
+local3d update
+# (or double-click update.bat on Windows / ./update.sh on macOS/Linux)
+
+# 3. 1-Command Automated MCP Client Registration & Skill Deployment
+local3d setup --client antigravity
+local3d setup --client claude_desktop
+local3d setup --client cursor
+
+# 4. View Active Hardware Telemetry & Performance Tier
+local3d status
+
+# 5. Start Native Stdio MCP Server
+local3d mcp
+```
+
+---
+
+### 3. Connecting to Your MCP Client
 
 Local3D Studio MCP Server runs **100% locally in-process over stdio**.
 
-Add Local3D Studio to your client's configuration file (e.g. `claude_desktop_config.json` or `.cursor/mcp.json`):
+You can configure your client automatically with:
+```bash
+local3d setup --client antigravity
+# Supported clients: antigravity, claude_desktop, cursor, vscode, gemini_cli
+```
+
+Or manually add Local3D Studio to your client's configuration file:
 
 ```json
 {
@@ -154,7 +197,11 @@ Add Local3D Studio to your client's configuration file (e.g. `claude_desktop_con
       "command": "/absolute/path/to/Local3D-Studio/.venv/bin/python",
       "args": [
         "/absolute/path/to/Local3D-Studio/server.py"
-      ]
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONIOENCODING": "utf-8"
+      }
     }
   }
 }
